@@ -1,0 +1,40 @@
+name: Trigger Deploy and Notify
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+      ARTIFACT_BRANCH:
+        required: true
+        type: string
+      ARTIFACT_VERSION:
+        required: true
+        type: string
+
+jobs:
+  deploy-check:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.check.outputs.status }}
+    steps:
+      - name: Validate Inputs
+        id: check
+        run: |
+          echo "status=success" >> $GITHUB_OUTPUT
+
+  notify:
+    needs: deploy-check
+    uses: your-org/your-repo/.github/workflows/gmailNotification.yaml@main
+    with:
+      PRODUCT_NAME: Terraform
+      ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
+      ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
+      ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
+      DEPLOYMENT_STATUS: ${{ needs.deploy-check.outputs.result }}
+      BUILD_NUMBER: ${{ github.run_number }}
+    secrets:
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
