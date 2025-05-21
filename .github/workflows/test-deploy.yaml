@@ -16,10 +16,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set Deployment Metadata (dynamic JSON)
+      - name: Set Deployment Metadata (base64 encoded JSON)
         id: set-meta
         run: |
-          DEPLOY_META_JSON='{
+          RAW_JSON='{
             "PRODUCT_NAME": "EC2Module",
             "ENVIRONMENT": "dev",
             "TEAM": "cloud-team",
@@ -27,8 +27,9 @@ jobs:
             "SERVICE": "ec2",
             "CLUSTER": "sandbox"
           }'
-          echo "DEPLOY_META_JSON=$DEPLOY_META_JSON" >> $GITHUB_ENV
-          echo "DEPLOY_META_JSON=$DEPLOY_META_JSON" >> $GITHUB_OUTPUT
+          ENCODED_JSON=$(echo "$RAW_JSON" | base64 -w0)
+          echo "DEPLOY_META_JSON=$ENCODED_JSON" >> $GITHUB_ENV
+          echo "DEPLOY_META_JSON=$ENCODED_JSON" >> $GITHUB_OUTPUT
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
