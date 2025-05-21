@@ -1,0 +1,74 @@
+name: Terraform Apply with Gmail Notification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      meta: ${{ steps.set.outputs.meta }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set inline JSON metadata
+        id: set
+        run: |
+          JSON_STRING='{
+            "PRODUCT_NAME": "EC2Module",
+            "ENVIRONMENT": "dev",
+            "TEAM": "cloud-team",
+            "VERSION": "v1.0.1",
+            "SERVICE": "ec2",
+            "CLUSTER": "sandbox"
+          }'
+          echo "meta=$JSON_STRING" >> $GITHUB_OUTPUT
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: ./ec2_module/test
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./ec2_module/test
+        run: terraform plan -var-file="test.tfvars"
+
+      - name: Terraform Apply
+        working-directory: ./ec2_module/test
+        run: terraform apply -auto-approve -var-file="test.tfvars"
+
+      - name: Send Gmail Notification
+        run: |
+          sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
+
+          echo "account gmail
+          tls on
+          tls_starttls on
+          auth on
+          host smtp.gmail.com
+          port 587
+          user ${{ secrets.GMAIL_USER }}
+          password ${{ secrets.GMAIL_PASS }}
+          from ${{ secrets.GMAIL_USER }}
+          logfile ~/.msmtp.log" > ~/.msmtprc
+
+          chmod 600 ~/.msmtprc
+
+          meta='${{ needs.deploy.outputs.meta }}'
+          echo "$meta" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > env_vars.txt
+          while IFS= read -r line; do export "$line"; done < env_vars.txt
+
+          echo "✅ Deployment Successful
+Product: $PRODUCT_NAME
+Environment: $ENVIRONMENT
+Team: $TEAM
+Service: $SERVICE
+Version: $VERSION
+Cluster: $CLUSTER
+GitHub Repo: ${{ github.repository }}
+Triggered By: ${{ github.actor }}" | \
+          mail -s "Terraform Apply ✅: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }}
+
