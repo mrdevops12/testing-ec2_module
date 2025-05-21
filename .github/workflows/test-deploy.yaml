@@ -1,38 +1,54 @@
-name: Trigger Gmail Notification
+name: Terraform Deploy with Gmail Notification
 
 on:
   workflow_dispatch:
     inputs:
       ENVIRONMENT:
-        description: 'Deployment environment name'
+        description: 'Deployment environment'
         required: true
         type: string
       ARTIFACT_BRANCH:
-        description: 'Artifact Branch'
+        description: 'Branch name'
         required: true
         type: string
       ARTIFACT_VERSION:
-        description: 'Artifact Version'
+        description: 'Version'
         required: true
         type: string
 
 jobs:
-  validate:
+  terraform-deploy:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.set-result.outputs.result }}
+      result: ${{ steps.status.outputs.result }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
-      - name: Validate Inputs
-        id: set-result
-        run: |
-          if [[ -z "${{ inputs.ARTIFACT_BRANCH }}" || -z "${{ inputs.ARTIFACT_VERSION }}" ]]; then
-            echo "result=failure" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "result=success" >> $GITHUB_OUTPUT
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  call-gmail-workflow:
-    needs: validate
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: ./ec2_module/test
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./ec2_module/test
+        run: terraform plan --var-file="test.tfvars" -input=false
+
+      - name: Terraform Apply
+        working-directory: ./ec2_module/test
+        run: terraform apply --var-file="test.tfvars" -auto-approve -input=false
+
+      - name: Set deployment status
+        id: status
+        run: echo "result=success" >> $GITHUB_OUTPUT
+
+  notify:
+    needs: terraform-deploy
     if: always()
     uses: ./.github/workflows/gmailNotification.yaml
     with:
@@ -40,7 +56,7 @@ jobs:
       ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
       ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
       ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
-      DEPLOYMENT_STATUS: ${{ needs.validate.outputs.result }}
+      DEPLOYMENT_STATUS: ${{ needs.terraform-deploy.outputs.result }}
     secrets:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
