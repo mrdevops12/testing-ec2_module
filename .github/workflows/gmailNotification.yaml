@@ -3,22 +3,9 @@ name: Gmail Notification Workflow
 on:
   workflow_call:
     inputs:
-      PRODUCT_NAME:
-        type: string
+      DEPLOY_META_JSON:
         required: true
-      ENVIRONMENT:
         type: string
-        required: true
-      ARTIFACT_BRANCH:
-        type: string
-        required: true
-      ARTIFACT_VERSION:
-        type: string
-        required: true
-      DEPLOYMENT_STATUS:
-        type: string
-        required: true
-
     secrets:
       GMAIL_USER:
         required: true
@@ -28,27 +15,41 @@ on:
         required: true
 
 jobs:
-  send-gmail:
+  send-email:
     runs-on: ubuntu-latest
     steps:
       - name: Install Mail Tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y msmtp-mta mailutils jq
+          sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
 
-      - name: Configure and Send Email
+      - name: Send Gmail Notification (Dynamic Content)
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
         run: |
+          # Configure msmtp for Gmail
           echo "defaults" > ~/.msmtprc
-          echo "auth           on" >> ~/.msmtprc
-          echo "tls            on" >> ~/.msmtprc
+          echo "auth on" >> ~/.msmtprc
+          echo "tls on" >> ~/.msmtprc
           echo "tls_trust_file /etc/ssl/certs/ca-certificates.crt" >> ~/.msmtprc
-          echo "account        gmail" >> ~/.msmtprc
-          echo "host           smtp.gmail.com" >> ~/.msmtprc
-          echo "port           587" >> ~/.msmtprc
-          echo "from           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
-          echo "user           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
-          echo "password       ${{ secrets.GMAIL_PASS }}" >> ~/.msmtprc
+          echo "account gmail" >> ~/.msmtprc
+          echo "host smtp.gmail.com" >> ~/.msmtprc
+          echo "port 587" >> ~/.msmtprc
+          echo "from $GMAIL_USER" >> ~/.msmtprc
+          echo "user $GMAIL_USER" >> ~/.msmtprc
+          echo "password $GMAIL_PASS" >> ~/.msmtprc
           echo "account default : gmail" >> ~/.msmtprc
           chmod 600 ~/.msmtprc
 
-          echo -e "Subject: 📣 ${{ inputs.PRODUCT_NAME }} Deployment - ${{ inputs.DEPLOYMENT_STATUS }}\n\n✅ Deployment Details:\n\nProduct     : ${{ inputs.PRODUCT_NAME }}\nEnvironment : ${{ inputs.ENVIRONMENT }}\nBranch      : ${{ inputs.ARTIFACT_BRANCH }}\nVersion     : ${{ inputs.ARTIFACT_VERSION }}\nStatus      : ${{ inputs.DEPLOYMENT_STATUS }}\nTriggered By: ${{ github.actor }}\nRun ID      : ${{ github.run_id }}\nRepo        : ${{ github.repository }}" | msmtp "${{ secrets.EMAIL_TO }}"
+          # Compose dynamic email body
+          echo "✅ Terraform Deployment Notification" > email.txt
+          echo >> email.txt
+          echo "$DEPLOY_META_JSON" | jq -r 'to_entries[] | "\(.key): \(.value)"' >> email.txt
+          echo >> email.txt
+          echo "Triggered By: ${{ github.actor }}" >> email.txt
+          echo "Repository  : ${{ github.repository }}" >> email.txt
+
+          # Send the email
+          mail -s "✅ Deployment Report" -aFrom:$GMAIL_USER $EMAIL_TO < email.txt
