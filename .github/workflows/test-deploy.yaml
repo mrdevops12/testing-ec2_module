@@ -2,31 +2,33 @@ name: Terraform Deploy with Gmail Notification
 
 on:
   workflow_dispatch:
-    inputs:
-      ENVIRONMENT:
-        description: 'Deployment environment'
-        required: true
-        type: string
-      ARTIFACT_BRANCH:
-        description: 'Branch name'
-        required: true
-        type: string
-      ARTIFACT_VERSION:
-        description: 'Version'
-        required: true
-        type: string
 
 jobs:
-  terraform-deploy:
+  deploy:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.status.outputs.result }}
+      DEPLOY_META_JSON: ${{ steps.set-meta.outputs.DEPLOY_META_JSON }}
+      result: ${{ steps.set-status.outputs.result }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set Deployment Metadata (dynamic JSON)
+        id: set-meta
+        run: |
+          DEPLOY_META_JSON='{
+            "PRODUCT_NAME": "EC2Module",
+            "ENVIRONMENT": "dev",
+            "TEAM": "cloud-team",
+            "VERSION": "v1.0.1",
+            "SERVICE": "ec2",
+            "CLUSTER": "sandbox"
+          }'
+          echo "DEPLOY_META_JSON=$DEPLOY_META_JSON" >> $GITHUB_ENV
+          echo "DEPLOY_META_JSON=$DEPLOY_META_JSON" >> $GITHUB_OUTPUT
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -43,20 +45,16 @@ jobs:
         working-directory: ./ec2_module/test
         run: terraform apply --var-file="test.tfvars" -auto-approve -input=false
 
-      - name: Set deployment status
-        id: status
+      - name: Set Status Output
+        id: set-status
         run: echo "result=success" >> $GITHUB_OUTPUT
 
   notify:
-    needs: terraform-deploy
-    if: always()
+    needs: deploy
     uses: ./.github/workflows/gmailNotification.yaml
     with:
-      PRODUCT_NAME: EC2Module
-      ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
-      ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
-      ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
-      DEPLOYMENT_STATUS: ${{ needs.terraform-deploy.outputs.result }}
+      DEPLOY_META_JSON: >
+        ${{ needs.deploy.outputs.DEPLOY_META_JSON | fromJson | toJson }}
     secrets:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
