@@ -1,0 +1,79 @@
+name: Gmail Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      PRODUCT_NAME:
+        type: string
+        required: true
+      ENVIRONMENT:
+        type: string
+        required: true
+      ARTIFACT_BRANCH:
+        type: string
+        required: true
+      ARTIFACT_VERSION:
+        type: string
+        required: true
+      DEPLOYMENT_STATUS:
+        type: string
+        required: true
+      BUILD_NUMBER:
+        type: string
+        default: "0"
+
+    secrets:
+      GMAIL_USER:
+        required: true
+      GMAIL_PASS:
+        required: true
+      EMAIL_TO:
+        required: true
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install msmtp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y msmtp-mta mailutils
+
+      - name: Configure Gmail credentials
+        run: |
+          echo "defaults" > ~/.msmtprc
+          echo "auth           on" >> ~/.msmtprc
+          echo "tls            on" >> ~/.msmtprc
+          echo "tls_trust_file /etc/ssl/certs/ca-certificates.crt" >> ~/.msmtprc
+          echo "account        gmail" >> ~/.msmtprc
+          echo "host           smtp.gmail.com" >> ~/.msmtprc
+          echo "port           587" >> ~/.msmtprc
+          echo "from           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
+          echo "user           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
+          echo "password       ${{ secrets.GMAIL_PASS }}" >> ~/.msmtprc
+          echo "account default : gmail" >> ~/.msmtprc
+          chmod 600 ~/.msmtprc
+
+      - name: Send Gmail Notification
+        run: |
+          STATUS_EMOJI=""
+          if [[ "${{ inputs.DEPLOYMENT_STATUS }}" == "success" ]]; then
+            STATUS_EMOJI="✅"
+          elif [[ "${{ inputs.DEPLOYMENT_STATUS }}" == "failure" ]]; then
+            STATUS_EMOJI="❌"
+          else
+            STATUS_EMOJI="⚠️"
+          fi
+
+          echo "${STATUS_EMOJI} Deployment Status: ${{ inputs.DEPLOYMENT_STATUS }}" > email.txt
+          echo >> email.txt
+          echo "Product     : ${{ inputs.PRODUCT_NAME }}" >> email.txt
+          echo "Environment : ${{ inputs.ENVIRONMENT }}" >> email.txt
+          echo "Branch      : ${{ inputs.ARTIFACT_BRANCH }}" >> email.txt
+          echo "Version     : ${{ inputs.ARTIFACT_VERSION }}" >> email.txt
+          echo "Build No    : ${{ inputs.BUILD_NUMBER }}" >> email.txt
+          echo "Triggered By: ${{ github.actor }}" >> email.txt
+          echo "Repo        : ${{ github.repository }}" >> email.txt
+          echo "Run ID      : ${{ github.run_id }}" >> email.txt
+
+          mail -s "${STATUS_EMOJI} Deployment Notification - ${{ inputs.PRODUCT_NAME }}" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }} < email.txt
