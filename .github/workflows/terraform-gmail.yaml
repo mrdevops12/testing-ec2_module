@@ -34,11 +34,11 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ./ec2_module/test
-        run: terraform plan -var-file="test.tfvars"
+        run: terraform plan
 
       - name: Terraform Apply
         working-directory: ./ec2_module/test
-        run: terraform apply -auto-approve -var-file="test.tfvars"
+        run: terraform apply -auto-approve
 
       - name: Send Gmail Notification
         run: |
@@ -57,18 +57,18 @@ jobs:
 
           chmod 600 ~/.msmtprc
 
-          meta='${{ needs.deploy.outputs.meta }}'
+          meta='${{ steps.set.outputs.meta }}'
           echo "$meta" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > env_vars.txt
           while IFS= read -r line; do export "$line"; done < env_vars.txt
 
-          echo "✅ Deployment Successful
-Product: $PRODUCT_NAME
-Environment: $ENVIRONMENT
-Team: $TEAM
-Service: $SERVICE
-Version: $VERSION
-Cluster: $CLUSTER
-GitHub Repo: ${{ github.repository }}
-Triggered By: ${{ github.actor }}" | \
-          mail -s "Terraform Apply ✅: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }}
+          echo "✅ Terraform Apply Successful
 
+Product     : $PRODUCT_NAME
+Environment : $ENVIRONMENT
+Team        : $TEAM
+Service     : $SERVICE
+Version     : $VERSION
+Cluster     : $CLUSTER
+Repository  : ${{ github.repository }}
+Triggered By: ${{ github.actor }}" | \
+          mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }}
