@@ -24,8 +24,12 @@ And then inside that workflow, you do:
 
 
 
-   RAW_JSON	Your actual metadata in JSON
-   ENCODED_JSON	Base64-encoded version of RAW_JSON
-   GITHUB_OUTPUT	Makes ENCODED_JSON available to next job
-   needs.deploy.outputs.DEPLOY_META_JSON	Passes that encoded string to the next job
-  base64 -d in Gmail job	Recovers the original metadata safely for email
+    RAW_JSON:  	 Your actual metadata in JSON
+    
+   ENCODED_JSON:  	Base64-encoded version of RAW_JSON
+   
+   GITHUB_OUTPUT:  	Makes ENCODED_JSON available to next job
+   
+   needs.deploy.outputs.DEPLOY_META_JSON:	Passes that encoded string to the next job
+   
+  base64 -d : in Gmail job	Recovers the original metadata safely for email
