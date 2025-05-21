@@ -18,9 +18,6 @@ on:
       DEPLOYMENT_STATUS:
         type: string
         required: true
-      BUILD_NUMBER:
-        type: string
-        default: "0"
 
     secrets:
       GMAIL_USER:
@@ -31,15 +28,15 @@ on:
         required: true
 
 jobs:
-  send-email:
+  send-gmail:
     runs-on: ubuntu-latest
     steps:
-      - name: Install msmtp
+      - name: Install Mail Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y msmtp-mta mailutils
+          sudo apt-get install -y msmtp-mta mailutils jq
 
-      - name: Configure Gmail credentials
+      - name: Configure and Send Email
         run: |
           echo "defaults" > ~/.msmtprc
           echo "auth           on" >> ~/.msmtprc
@@ -54,26 +51,4 @@ jobs:
           echo "account default : gmail" >> ~/.msmtprc
           chmod 600 ~/.msmtprc
 
-      - name: Send Gmail Notification
-        run: |
-          STATUS_EMOJI=""
-          if [[ "${{ inputs.DEPLOYMENT_STATUS }}" == "success" ]]; then
-            STATUS_EMOJI="✅"
-          elif [[ "${{ inputs.DEPLOYMENT_STATUS }}" == "failure" ]]; then
-            STATUS_EMOJI="❌"
-          else
-            STATUS_EMOJI="⚠️"
-          fi
-
-          echo "${STATUS_EMOJI} Deployment Status: ${{ inputs.DEPLOYMENT_STATUS }}" > email.txt
-          echo >> email.txt
-          echo "Product     : ${{ inputs.PRODUCT_NAME }}" >> email.txt
-          echo "Environment : ${{ inputs.ENVIRONMENT }}" >> email.txt
-          echo "Branch      : ${{ inputs.ARTIFACT_BRANCH }}" >> email.txt
-          echo "Version     : ${{ inputs.ARTIFACT_VERSION }}" >> email.txt
-          echo "Build No    : ${{ inputs.BUILD_NUMBER }}" >> email.txt
-          echo "Triggered By: ${{ github.actor }}" >> email.txt
-          echo "Repo        : ${{ github.repository }}" >> email.txt
-          echo "Run ID      : ${{ github.run_id }}" >> email.txt
-
-          mail -s "${STATUS_EMOJI} Deployment Notification - ${{ inputs.PRODUCT_NAME }}" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }} < email.txt
+          echo -e "Subject: 📣 ${{ inputs.PRODUCT_NAME }} Deployment - ${{ inputs.DEPLOYMENT_STATUS }}\n\n✅ Deployment Details:\n\nProduct     : ${{ inputs.PRODUCT_NAME }}\nEnvironment : ${{ inputs.ENVIRONMENT }}\nBranch      : ${{ inputs.ARTIFACT_BRANCH }}\nVersion     : ${{ inputs.ARTIFACT_VERSION }}\nStatus      : ${{ inputs.DEPLOYMENT_STATUS }}\nTriggered By: ${{ github.actor }}\nRun ID      : ${{ github.run_id }}\nRepo        : ${{ github.repository }}" | msmtp "${{ secrets.EMAIL_TO }}"
