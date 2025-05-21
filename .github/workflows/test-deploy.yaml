@@ -53,8 +53,7 @@ jobs:
     needs: deploy
     uses: ./.github/workflows/gmailNotification.yaml
     with:
-      DEPLOY_META_JSON: >
-        ${{ needs.deploy.outputs.DEPLOY_META_JSON | fromJson | toJson }}
+      DEPLOY_META_JSON: ${{ needs.deploy.outputs.DEPLOY_META_JSON }}
     secrets:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
