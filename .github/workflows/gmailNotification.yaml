@@ -29,7 +29,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
         run: |
-          # Configure msmtp for Gmail
+          # Configure Gmail SMTP
           echo "defaults" > ~/.msmtprc
           echo "auth on" >> ~/.msmtprc
           echo "tls on" >> ~/.msmtprc
@@ -43,13 +43,12 @@ jobs:
           echo "account default : gmail" >> ~/.msmtprc
           chmod 600 ~/.msmtprc
 
-          # Compose dynamic email body
+          # Decode JSON and format email body dynamically
           echo "✅ Terraform Deployment Notification" > email.txt
           echo >> email.txt
-          echo "$DEPLOY_META_JSON" | jq -r 'to_entries[] | "\(.key): \(.value)"' >> email.txt
+          echo "$DEPLOY_META_JSON" | base64 -d | jq -r 'to_entries[] | "\(.key): \(.value)"' >> email.txt
           echo >> email.txt
           echo "Triggered By: ${{ github.actor }}" >> email.txt
           echo "Repository  : ${{ github.repository }}" >> email.txt
 
-          # Send the email
           mail -s "✅ Deployment Report" -aFrom:$GMAIL_USER $EMAIL_TO < email.txt
