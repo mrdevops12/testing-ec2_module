@@ -44,7 +44,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
 
-          echo "account gmail
+          cat <<EOF > ~/.msmtprc
+          defaults
           tls on
           tls_starttls on
           auth on
@@ -53,12 +54,14 @@ jobs:
           user ${{ secrets.GMAIL_USER }}
           password ${{ secrets.GMAIL_PASS }}
           from ${{ secrets.GMAIL_USER }}
-          logfile ~/.msmtp.log" > ~/.msmtprc
+          logfile ~/.msmtp.log
+          EOF
 
           chmod 600 ~/.msmtprc
 
           meta='${{ steps.set.outputs.meta }}'
           echo "$meta" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > env_vars.txt
+
           while IFS= read -r line; do export "$line"; done < env_vars.txt
 
           echo "✅ Terraform Apply Successful
@@ -69,6 +72,5 @@ Team        : $TEAM
 Service     : $SERVICE
 Version     : $VERSION
 Cluster     : $CLUSTER
-Repository  : ${{ github.repository }}
-Triggered By: ${{ github.actor }}" | \
-          mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }}
+Repo        : ${{ github.repository }}
+Triggered By: ${{ github.actor }}" | mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:${{ secrets.GMAIL_USER }} ${{ secrets.EMAIL_TO }}
