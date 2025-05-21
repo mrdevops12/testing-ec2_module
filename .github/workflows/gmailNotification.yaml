@@ -1,54 +1,63 @@
-name: Gmail Notification Workflow
+name: Terraform Deploy and Gmail Notification
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      PRODUCT_NAME:
-        type: string
-        required: true
       ENVIRONMENT:
-        type: string
+        description: 'Deployment environment name'
         required: true
+        type: string
       ARTIFACT_BRANCH:
-        type: string
+        description: 'Artifact Branch'
         required: true
+        type: string
       ARTIFACT_VERSION:
+        description: 'Artifact Version'
+        required: true
         type: string
-        required: true
-      DEPLOYMENT_STATUS:
-        type: string
-        required: true
-
-    secrets:
-      GMAIL_USER:
-        required: true
-      GMAIL_PASS:
-        required: true
-      EMAIL_TO:
-        required: true
 
 jobs:
-  send-gmail:
+  terraform-apply:
     runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.set-result.outputs.result }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
-      - name: Install Mail Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y msmtp-mta mailutils jq
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Configure and Send Email
-        run: |
-          echo "defaults" > ~/.msmtprc
-          echo "auth           on" >> ~/.msmtprc
-          echo "tls            on" >> ~/.msmtprc
-          echo "tls_trust_file /etc/ssl/certs/ca-certificates.crt" >> ~/.msmtprc
-          echo "account        gmail" >> ~/.msmtprc
-          echo "host           smtp.gmail.com" >> ~/.msmtprc
-          echo "port           587" >> ~/.msmtprc
-          echo "from           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
-          echo "user           ${{ secrets.GMAIL_USER }}" >> ~/.msmtprc
-          echo "password       ${{ secrets.GMAIL_PASS }}" >> ~/.msmtprc
-          echo "account default : gmail" >> ~/.msmtprc
-          chmod 600 ~/.msmtprc
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-          echo -e "Subject: 📣 ${{ inputs.PRODUCT_NAME }} Deployment - ${{ inputs.DEPLOYMENT_STATUS }}\n\n✅ Deployment Details:\n\nProduct     : ${{ inputs.PRODUCT_NAME }}\nEnvironment : ${{ inputs.ENVIRONMENT }}\nBranch      : ${{ inputs.ARTIFACT_BRANCH }}\nVersion     : ${{ inputs.ARTIFACT_VERSION }}\nStatus      : ${{ inputs.DEPLOYMENT_STATUS }}\nTriggered By: ${{ github.actor }}\nRun ID      : ${{ github.run_id }}\nRepo        : ${{ github.repository }}" | msmtp "${{ secrets.EMAIL_TO }}"
+      - name: Terraform Init
+        working-directory: ./ec2_module/test
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./ec2_module/test
+        run: terraform plan --var-file="test.tfvars" -input=false
+
+      - name: Terraform Apply
+        working-directory: ./ec2_module/test
+        run: terraform apply --var-file="test.tfvars" -auto-approve -input=false
+
+      - name: Set Deployment Status
+        id: set-result
+        run: echo "result=success" >> $GITHUB_OUTPUT
+
+  notify-gmail:
+    needs: terraform-apply
+    if: always()
+    uses: ./.github/workflows/gmailNotification.yaml
+    with:
+      PRODUCT_NAME: EC2Module
+      ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
+      ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
+      ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
+      DEPLOYMENT_STATUS: ${{ needs.terraform-apply.outputs.result }}
+    secrets:
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
