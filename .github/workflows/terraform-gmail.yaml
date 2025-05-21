@@ -46,29 +46,17 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
 
-          printf "%s\n" \
-            "defaults" \
-            "tls on" \
-            "tls_starttls on" \
-            "auth on" \
-            "host smtp.gmail.com" \
-            "port 587" \
-            "user $GMAIL_USER" \
-            "password $GMAIL_PASS" \
-            "from $GMAIL_USER" \
-            "logfile ~/.msmtp.log" > ~/.msmtprc
-
+          echo "defaults" > ~/.msmtprc
+          echo "auth           on" >> ~/.msmtprc
+          echo "tls            on" >> ~/.msmtprc
+          echo "tls_trust_file /etc/ssl/certs/ca-certificates.crt" >> ~/.msmtprc
+          echo "account        gmail" >> ~/.msmtprc
+          echo "host           smtp.gmail.com" >> ~/.msmtprc
+          echo "port           587" >> ~/.msmtprc
+          echo "from           $GMAIL_USER" >> ~/.msmtprc
+          echo "user           $GMAIL_USER" >> ~/.msmtprc
+          echo "password       $GMAIL_PASS" >> ~/.msmtprc
+          echo "account default : gmail" >> ~/.msmtprc
           chmod 600 ~/.msmtprc
 
-          echo "✅ Terraform Apply Successful" > email.txt
-          echo >> email.txt
-          echo "Product     : $PRODUCT_NAME" >> email.txt
-          echo "Environment : $ENVIRONMENT" >> email.txt
-          echo "Team        : $TEAM" >> email.txt
-          echo "Service     : $SERVICE" >> email.txt
-          echo "Version     : $VERSION" >> email.txt
-          echo "Cluster     : $CLUSTER" >> email.txt
-          echo "Repository  : ${{ github.repository }}" >> email.txt
-          echo "Triggered By: ${{ github.actor }}" >> email.txt
-
-          mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:$GMAIL_USER $EMAIL_TO < email.txt
+          echo -e "Subject: ✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)\n\n✅ Terraform Apply Successful\n\nProduct     : $PRODUCT_NAME\nEnvironment : $ENVIRONMENT\nTeam        : $TEAM\nService     : $SERVICE\nVersion     : $VERSION\nCluster     : $CLUSTER\nRepository  : ${{ github.repository }}\nTriggered By: ${{ github.actor }}" | msmtp $EMAIL_TO
