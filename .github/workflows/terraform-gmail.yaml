@@ -41,21 +41,20 @@ jobs:
         run: terraform apply -auto-approve
 
       - name: Send Gmail Notification
+        shell: bash
         run: |
           sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
 
-          cat <<EOF > ~/.msmtprc
-          defaults
-          tls on
-          tls_starttls on
-          auth on
-          host smtp.gmail.com
-          port 587
-          user ${{ secrets.GMAIL_USER }}
-          password ${{ secrets.GMAIL_PASS }}
-          from ${{ secrets.GMAIL_USER }}
-          logfile ~/.msmtp.log
-          EOF
+          echo "defaults
+tls on
+tls_starttls on
+auth on
+host smtp.gmail.com
+port 587
+user ${{ secrets.GMAIL_USER }}
+password ${{ secrets.GMAIL_PASS }}
+from ${{ secrets.GMAIL_USER }}
+logfile ~/.msmtp.log" > ~/.msmtprc
 
           chmod 600 ~/.msmtprc
 
