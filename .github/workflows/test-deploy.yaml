@@ -1,39 +1,47 @@
-name: Trigger Deploy and Notify
+name: Trigger Gmail Notification
 
 on:
   workflow_dispatch:
     inputs:
       ENVIRONMENT:
+        description: 'Deployment environment name'
         required: true
         type: string
       ARTIFACT_BRANCH:
+        description: 'Artifact Branch'
         required: true
         type: string
       ARTIFACT_VERSION:
+        description: 'Artifact Version'
         required: true
         type: string
 
 jobs:
-  deploy-check:
+  validate:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.check.outputs.status }}
+      result: ${{ steps.set-result.outputs.result }}
     steps:
       - name: Validate Inputs
-        id: check
+        id: set-result
         run: |
-          echo "status=success" >> $GITHUB_OUTPUT
+          if [[ -z "${{ inputs.ARTIFACT_BRANCH }}" || -z "${{ inputs.ARTIFACT_VERSION }}" ]]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "result=success" >> $GITHUB_OUTPUT
 
-  notify:
-    needs: deploy-check
-    uses: your-org/your-repo/.github/workflows/gmailNotification.yaml@main
+  call-gmail-workflow:
+    needs: validate
+    if: always()
+    uses: ./.github/workflows/gmailNotification.yaml
     with:
-      PRODUCT_NAME: Terraform
+      PRODUCT_NAME: EC2Module
+      WORKFLOW_BUILD_NUMBER: ${{ github.run_number }}
       ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
+      DEPLOYMENT_STATUS: ${{ needs.validate.outputs.result }}
       ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
       ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
-      DEPLOYMENT_STATUS: ${{ needs.deploy-check.outputs.result }}
-      BUILD_NUMBER: ${{ github.run_number }}
     secrets:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
