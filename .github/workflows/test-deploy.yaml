@@ -37,11 +37,10 @@ jobs:
     uses: ./.github/workflows/gmailNotification.yaml
     with:
       PRODUCT_NAME: EC2Module
-      WORKFLOW_BUILD_NUMBER: ${{ github.run_number }}
       ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
-      DEPLOYMENT_STATUS: ${{ needs.validate.outputs.result }}
       ARTIFACT_BRANCH: ${{ inputs.ARTIFACT_BRANCH }}
       ARTIFACT_VERSION: ${{ inputs.ARTIFACT_VERSION }}
+      DEPLOYMENT_STATUS: ${{ needs.validate.outputs.result }}
     secrets:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
