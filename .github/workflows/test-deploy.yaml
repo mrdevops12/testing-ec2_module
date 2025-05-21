@@ -20,21 +20,17 @@ jobs:
         id: set-meta
         run: |
           RAW_JSON='{
-            - name: Set Deployment Metadata (base64 encoded JSON)
-  id: set-meta
-  run: |
-    RAW_JSON='{
-      "PRODUCT_NAME": "EC2Module",
-      "ENVIRONMENT": "dev",
-      "TEAM": "cloud-team",
-      "VERSION": "v1.0.1",
-      "SERVICE": "ec2",
-      "CLUSTER": "sandbox",
-      "BUILD_ID": "build-45873",
-      "OWNER": "Mahesh Varma",
-      "DEPLOY_TIME": "'"$(date -u +'%Y-%m-%dT%H:%M:%SZ')"'",
-      "COMPONENT": "backend",
-      "TAGS": "qa,automation,aws"
+             "PRODUCT_NAME": "EC2Module",
+             "ENVIRONMENT": "dev",
+             "TEAM": "cloud-team",
+             "VERSION": "v1.0.1",
+             "SERVICE": "ec2",
+             "CLUSTER": "sandbox",
+             "BUILD_ID": "build-45873",
+             "OWNER": "Mahesh Varma",
+             "DEPLOY_TIME": "'"$(date -u +'%Y-%m-%dT%H:%M:%SZ')"'",
+             "COMPONENT": "backend",
+             "TAGS": "qa,automation,aws"
     }'
     ENCODED_JSON=$(echo "$RAW_JSON" | base64 -w0)
     echo "DEPLOY_META_JSON=$ENCODED_JSON" >> $GITHUB_ENV
