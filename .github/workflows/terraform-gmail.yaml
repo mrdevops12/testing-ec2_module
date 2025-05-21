@@ -1,5 +1,3 @@
-# ✅ FINAL CLEAN YAML FOR GITHUB ACTIONS + GMAIL (NO ERRORS)
-
 name: Terraform Apply with Gmail Notification
 
 on:
@@ -43,28 +41,31 @@ jobs:
           GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: |
-          sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils
+          sudo apt-get update && sudo apt-get install -y msmtp-mta mailutils jq
 
-          echo "defaults
-          tls on
-          tls_starttls on
-          auth on
-          host smtp.gmail.com
-          port 587
-          user $GMAIL_USER
-          password $GMAIL_PASS
-          from $GMAIL_USER
-          logfile ~/.msmtp.log" > ~/.msmtprc
+          printf "%s\n" \
+            "defaults" \
+            "tls on" \
+            "tls_starttls on" \
+            "auth on" \
+            "host smtp.gmail.com" \
+            "port 587" \
+            "user $GMAIL_USER" \
+            "password $GMAIL_PASS" \
+            "from $GMAIL_USER" \
+            "logfile ~/.msmtp.log" > ~/.msmtprc
 
           chmod 600 ~/.msmtprc
 
-          echo "✅ Terraform Apply Successful
+          echo "✅ Terraform Apply Successful" > email.txt
+          echo >> email.txt
+          echo "Product     : $PRODUCT_NAME" >> email.txt
+          echo "Environment : $ENVIRONMENT" >> email.txt
+          echo "Team        : $TEAM" >> email.txt
+          echo "Service     : $SERVICE" >> email.txt
+          echo "Version     : $VERSION" >> email.txt
+          echo "Cluster     : $CLUSTER" >> email.txt
+          echo "Repository  : ${{ github.repository }}" >> email.txt
+          echo "Triggered By: ${{ github.actor }}" >> email.txt
 
-Product     : $PRODUCT_NAME
-Environment : $ENVIRONMENT
-Team        : $TEAM
-Service     : $SERVICE
-Version     : $VERSION
-Cluster     : $CLUSTER
-Repository  : ${{ github.repository }}
-Triggered By: ${{ github.actor }}" | mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:$GMAIL_USER $EMAIL_TO
+          mail -s "✅ Terraform Apply: $PRODUCT_NAME ($ENVIRONMENT)" -aFrom:$GMAIL_USER $EMAIL_TO < email.txt
