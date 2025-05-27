@@ -29,7 +29,14 @@ jobs:
       - name: Encode Project A JSON
         id: encode
         run: |
-          JSON=$(jq -n             --arg product "Pathway"             --arg branch "${{ inputs.BRANCH }}"             --arg version "${{ inputs.VERSION }}"             --arg env "${{ inputs.ENV }}"             --arg status "${{ inputs.STATUS }}"             --arg build "${{ github.run_number }}"             '{
+          JSON=$(jq -n \
+            --arg product "Pathway" \
+            --arg branch "${{ inputs.BRANCH }}" \
+            --arg version "${{ inputs.VERSION }}" \
+            --arg env "${{ inputs.ENV }}" \
+            --arg status "${{ inputs.STATUS }}" \
+            --arg build "${{ github.run_number }}" \
+            '{
               product: $product,
               branch: $branch,
               version: $version,
@@ -37,6 +44,7 @@ jobs:
               status: $status,
               build: $build
             }')
+
           ENCODED=$(echo "$JSON" | base64 -w 0)
           echo "DEPLOY_META_JSON=$ENCODED" >> $GITHUB_OUTPUT
 
