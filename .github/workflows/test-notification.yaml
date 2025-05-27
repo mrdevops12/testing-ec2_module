@@ -1,0 +1,49 @@
+name: Project A Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENV:
+        description: 'Environment'
+        required: true
+        type: string
+      BRANCH:
+        description: 'Branch'
+        required: true
+        type: string
+      VERSION:
+        description: 'Version'
+        required: true
+        type: string
+      STATUS:
+        description: 'Status'
+        required: true
+        type: string
+
+jobs:
+  prepare-json:
+    runs-on: ubuntu-latest
+    outputs:
+      DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
+    steps:
+      - name: Encode Project A JSON
+        id: encode
+        run: |
+          JSON=$(jq -n             --arg product "Pathway"             --arg branch "${{ inputs.BRANCH }}"             --arg version "${{ inputs.VERSION }}"             --arg env "${{ inputs.ENV }}"             --arg status "${{ inputs.STATUS }}"             --arg build "${{ github.run_number }}"             '{
+              product: $product,
+              branch: $branch,
+              version: $version,
+              env: $env,
+              status: $status,
+              build: $build
+            }')
+          ENCODED=$(echo "$JSON" | base64 -w 0)
+          echo "DEPLOY_META_JSON=$ENCODED" >> $GITHUB_OUTPUT
+
+  notify:
+    needs: prepare-json
+    uses: your-org/your-repo/.github/workflows/teamsNotification.yaml@main
+    with:
+      DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.DEVSECOPS_TEAMS_HOOK }}
