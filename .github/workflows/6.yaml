@@ -8,7 +8,7 @@ on:
         required: true
         type: string
     secrets:
-      DEVSECOPS_TEAMS_HOOK:
+      TEAMS_WEBHOOK_URL:
         description: 'Teams Incoming Webhook URL'
         required: true
 
@@ -119,11 +119,11 @@ jobs:
           echo "Payload JSON written."
 
           # Final webhook call
-          if [[ -z "${{ secrets.DEVSECOPS_TEAMS_HOOK }}" ]]; then
-            echo "❌ ERROR: Secret DEVSECOPS_TEAMS_HOOK is missing!"
+          if [[ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]]; then
+            echo "❌ ERROR: Secret TEAMS_WEBHOOK_URL is missing!"
             exit 1
           fi
 
           curl -X POST -H "Content-Type: application/json" \
                -d @message.json \
-               "${{ secrets.DEVSECOPS_TEAMS_HOOK }}"
+               "${{ secrets.TEAMS_WEBHOOK_URL }}"
