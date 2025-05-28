@@ -1,0 +1,51 @@
+- name: Send Teams Notification with dynamic facts
+  run: |
+    DEPLOYMENT_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+    # Check if required variables are defined
+    if [[ -z "$BRANCH" || -z "$PRODUCT" || -z "$THEME_COLOR" ]]; then
+      echo "ERROR: One or more required variables are empty."
+      exit 1
+    fi
+
+    payload=$(jq -n \
+      --arg themeColor "$THEME_COLOR" \
+      --arg emoji "$STATUS_EMOJI" \
+      --arg status "$STATUS_MESSAGE" \
+      --arg time "$DEPLOYMENT_TIME" \
+      --arg repo "${{ github.repository }}" \
+      --arg actor "${{ github.actor }}" \
+      --arg runId "${{ github.run_id }}" \
+      --arg productName "$PRODUCT" \
+      --arg branch "$BRANCH" \
+      --argjson facts "$FACTS_JSON" \
+      '{
+        "@type": "MessageCard",
+        "@context": "https://schema.org/extensions",
+        "themeColor": $themeColor,
+        "summary": "Deployment \($status)",
+        "title": "\($emoji) Deployment \($status) - \($productName)",
+        "sections": [{
+          "activityTitle": "**Deployment Details**",
+          "facts": $facts,
+          "markdown": true
+        }],
+        "potentialAction": [
+          {
+            "@type": "OpenUri",
+            "name": "View Workflow Run",
+            "targets": [{ "os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)" }]
+          },
+          {
+            "@type": "OpenUri",
+            "name": "View Branch Commits",
+            "targets": [{ "os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)" }]
+          }
+        ]
+      }'
+    )
+
+    echo "$payload" > message.json
+    cat message.json
+
+    curl -X POST -H "Content-Type: application/json" -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
