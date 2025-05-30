@@ -1,0 +1,137 @@
+name: Teams Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      DEPLOY_META_JSON:
+        description: 'Base64-encoded JSON with deployment metadata'
+        required: true
+        type: string
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams Incoming Webhook URL'
+        required: true
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decode DEPLOY_META_JSON and export keys
+        id: parse-json
+        run: |
+          echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
+          cat deploy-meta.json
+
+          for key in $(jq -r 'keys[]' deploy-meta.json); do
+            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            var_name=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            echo "$var_name=$value" >> $GITHUB_ENV
+            echo "Exported: $var_name=$value"
+          done
+
+      - name: Set status color and emoji
+        run: |
+          case "$STATUS" in
+            success)
+              echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=✅" >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
+              ;;
+            failed)
+              echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❌" >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV
+              ;;
+            cancelled)
+              echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "THEME_COLOR=#808080" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❓" >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Send Teams Notification with formatted layout
+        run: |
+          DEPLOYMENT_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          echo "DEBUG: BRANCH=$BRANCH"
+          echo "DEBUG: PRODUCT=$PRODUCT"
+          echo "DEBUG: THEME_COLOR=$THEME_COLOR"
+
+          if [[ -z "$BRANCH" || -z "$PRODUCT" || -z "$THEME_COLOR" ]]; then
+            echo "ERROR: One or more required variables are empty."
+            exit 1
+          fi
+
+          payload=$(jq -n \
+            --arg themeColor "$THEME_COLOR" \
+            --arg emoji "$STATUS_EMOJI" \
+            --arg status "$STATUS_MESSAGE" \
+            --arg actor "${{ github.actor }}" \
+            --arg timestamp "$DEPLOYMENT_TIME" \
+            --arg runId "${{ github.run_number }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "$BRANCH" \
+            --arg version "$VERSION" \
+            --arg module "$PRODUCT" \
+            --arg env "$ENV" \
+            '{
+              "@type": "MessageCard",
+              "@context": "https://schema.org/extensions",
+              "themeColor": $themeColor,
+              "summary": "Build and Release Notification",
+              "sections": [
+                {
+                  "activityTitle": "🔧 **Build Information**",
+                  "facts": [
+                    { "name": "Status", "value": "✅ \($status)" },
+                    { "name": "Triggered By", "value": $actor },
+                    { "name": "Triggered At", "value": $timestamp },
+                    { "name": "Workflow Run", "value": "#\($runId)" }
+                  ],
+                  "markdown": true
+                },
+                {
+                  "activityTitle": "🚀 **Release Information**",
+                  "facts": [
+                    { "name": "Source Branch", "value": "`\($branch)`" },
+                    { "name": "Artifact Version", "value": "`\($version)`" },
+                    { "name": "Application Module", "value": $module },
+                    { "name": "Environment", "value": $env }
+                  ],
+                  "markdown": true
+                }
+              ],
+              "potentialAction": [
+                {
+                  "@type": "OpenUri",
+                  "name": "View Workflow Run",
+                  "targets": [
+                    { "os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)" }
+                  ]
+                },
+                {
+                  "@type": "OpenUri",
+                  "name": "View Branch Commits",
+                  "targets": [
+                    { "os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)" }
+                  ]
+                }
+              ]
+            }')
+
+          echo "$payload" > message.json
+          echo "Payload JSON written."
+
+          if [[ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]]; then
+            echo "❌ ERROR: Secret TEAMS_WEBHOOK_URL is missing!"
+            exit 1
+          fi
+
+          curl -X POST -H "Content-Type: application/json" \
+               -d @message.json \
+               "${{ secrets.TEAMS_WEBHOOK_URL }}"
