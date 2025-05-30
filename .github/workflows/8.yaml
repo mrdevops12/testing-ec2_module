@@ -1,3 +1,4 @@
+# .github/workflows/teams-notification-source.yml
 name: Teams Notification Workflow
 
 on:
@@ -16,6 +17,24 @@ jobs:
   send-notification:
     runs-on: ubuntu-latest
     steps:
+      # ────────────────────────────
+      # 1) bring down the repo so .git exists
+      # ────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      # ────────────────────────────
+      # 2) record build start
+      # ────────────────────────────
+      - name: Capture build start time
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      # ────────────────────────────
+      # 3) decode the JSON payload & export each field
+      # ────────────────────────────
       - name: Decode DEPLOY_META_JSON and export keys
         id: parse-json
         run: |
@@ -23,75 +42,81 @@ jobs:
           cat deploy-meta.json
 
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            var_name=$(echo "$key" | tr '[:lower:]' '[:upper:]')
-            echo "$var_name=$value" >> $GITHUB_ENV
-            echo "Exported: $var_name=$value"
+            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            var=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            echo "$var=$val" >> $GITHUB_ENV
           done
 
+      # ────────────────────────────
+      # 4) build your “facts” array if you still want those
+      # ────────────────────────────
+      - name: Build dynamic facts array
+        run: |
+          FACTS=$(jq -n '[]')
+          for key in $(jq -r 'keys[]' deploy-meta.json); do
+            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            label=$(echo "$key" | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
+            FACTS=$(echo "$FACTS" \
+              | jq --arg name "$label" --arg value "$val" \
+                   '. += [{"name": $name, "value": $value}]')
+          done
+          echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
+          echo "$FACTS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # ────────────────────────────
+      # 5) set color & emoji
+      # ────────────────────────────
       - name: Set status color and emoji
         run: |
           case "$STATUS" in
             success)
               echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=✅" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=✅"       >> $GITHUB_ENV
               echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
               ;;
             failed)
               echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❌" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❌"       >> $GITHUB_ENV
               echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV
               ;;
             cancelled)
               echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=⚠️"       >> $GITHUB_ENV
               echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
               ;;
             *)
               echo "THEME_COLOR=#808080" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❓" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❓"       >> $GITHUB_ENV
               echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV
               ;;
           esac
 
+      # ────────────────────────────
+      # 6) send the card with formatted Build + Release info
+      # ────────────────────────────
       - name: Send Teams Notification with formatted layout
         run: |
-          # capture build start
-          echo "BUILD_START=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
-
-          # (any other prep work here…)
-
-          # capture build end
+          # capture end time & commit info
           BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          # extract commit info
           COMMIT_ID=${GITHUB_SHA::8}
-          COMMIT_MSG=$(git log -1 --pretty=format:'%s' $GITHUB_SHA)
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
 
-          echo "DEBUG: BRANCH=$BRANCH"
-          echo "DEBUG: PRODUCT=$PRODUCT"
-          echo "DEBUG: THEME_COLOR=$THEME_COLOR"
-
-          if [[ -z "$BRANCH" || -z "$PRODUCT" || -z "$THEME_COLOR" ]]; then
-            echo "ERROR: One or more required variables are empty."
-            exit 1
-          fi
-
+          # build the MessageCard payload
           payload=$(jq -n \
             --arg themeColor "$THEME_COLOR" \
-            --arg emoji      "$STATUS_EMOJI" \
-            --arg status     "$STATUS_MESSAGE" \
-            --arg actor      "${{ github.actor }}" \
-            --arg start      "$BUILD_START" \
-            --arg end        "$BUILD_END" \
-            --arg runId      "${{ github.run_number }}" \
-            --arg repo       "${{ github.repository }}" \
-            --arg branch     "$BRANCH" \
-            --arg version    "$VERSION" \
-            --arg module     "$PRODUCT" \
-            --arg env        "$ENV" \
-            --arg commitId   "$COMMIT_ID" \
-            --arg commitMsg  "$COMMIT_MSG" \
+            --arg status "$STATUS_MESSAGE" \
+            --arg emoji "$STATUS_EMOJI" \
+            --arg actor "${{ github.actor }}" \
+            --arg start "$BUILD_START" \
+            --arg end "$BUILD_END" \
+            --arg commit "${COMMIT_ID} - ${COMMIT_MSG}" \
+            --arg runId "${{ github.run_number }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "$BRANCH" \
+            --arg version "$VERSION" \
+            --arg module "$PRODUCT" \
+            --arg env "$ENV" \
             '{
               "@type": "MessageCard",
               "@context": "https://schema.org/extensions",
@@ -103,10 +128,10 @@ jobs:
                   "facts": [
                     { "name": "Status",        "value": "\($emoji) \($status)" },
                     { "name": "Triggered By",  "value": $actor },
-                    { "name": "Start Time",    "value": "`\($start)`" },
-                    { "name": "End Time",      "value": "`\($end)`" },
-                    { "name": "Workflow Run",  "value": "#\($runId)" },
-                    { "name": "Commit",        "value": "`\($commitId)` — \($commitMsg)" }
+                    { "name": "Start Time",    "value": $start },
+                    { "name": "End Time",      "value": $end },
+                    { "name": "Commit",        "value": $commit },
+                    { "name": "Workflow Run",  "value": "#\($runId)" }
                   ],
                   "markdown": true
                 },
@@ -126,24 +151,21 @@ jobs:
                   "@type": "OpenUri",
                   "name": "View Workflow Run",
                   "targets": [
-                    { "os": "default",
-                      "uri": "https://github.com/\($repo)/actions/runs/\($runId)" }
+                    { "os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)" }
                   ]
                 },
                 {
                   "@type": "OpenUri",
                   "name": "View Branch Commits",
                   "targets": [
-                    { "os": "default",
-                      "uri": "https://github.com/\($repo)/commits/\($branch)" }
+                    { "os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)" }
                   ]
                 }
               ]
-            }')
+            }'
+          )
 
           echo "$payload" > message.json
-          echo "Payload JSON written."
-
           curl -X POST \
                -H "Content-Type: application/json" \
                -d @message.json \
