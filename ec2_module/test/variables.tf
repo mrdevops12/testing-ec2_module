@@ -1,45 +1,11 @@
-
-variable "ami_id" {
-  type = string
-}
-
-variable "instance_type" {
-  type = string
-}
-
-variable "key_name" {
-  type = string
-}
-
-variable "private_subnet_ids" {
-  type = list(string)
-  description = "List of private subnet IDs to launch EC2 instances"
-}
-
-variable "security_group_ids" {
-  type = list(string)
-}
-
-variable "associate_public_ip" {
-  type = bool
-}
-
-variable "tags" {
-  type = map(string)
-}
-
-variable "name" {
-  type = string
-}
-
-variable "ebs_volume_count" {
-  type = number
-}
-
-variable "ebs_volume_size" {
-  type = number
-}
-
-variable "root_volume_size" {
-  type = number
-}
+variable "ami_id" { type = string }
+variable "instance_type" { type = string }
+variable "key_name" { type = string }
+variable "private_subnet_ids" { type = list(string) }
+variable "security_group_ids" { type = list(string) }
+variable "associate_public_ip" { type = bool }
+variable "tags" { type = map(string) }
+variable "name" { type = string }
+variable "ebs_volume_count" { type = number }
+variable "ebs_volume_size" { type = number }
+variable "root_volume_size" { type = number }

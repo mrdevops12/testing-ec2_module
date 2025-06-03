@@ -1,4 +1,3 @@
-
 module "ec2_instances" {
   source = "../modules/ec2_wrapper"
   for_each = toset(var.private_subnet_ids)
