@@ -1,8 +1,8 @@
 # .github/workflows/teams-notification-source.yml
 #
 # Reusable workflow: send a formatted notification to Teams, then send the same info via email.
-# The mail script (mail.py) lives under scripts/mail.py and uses our SMTP relay.
-# Make sure mail.py’s SMTP_SERVER, SMTP_PORT, and FROM_ADDRESS match our environment.
+# The email script (main.py) lives at the repo root and uses our SMTP relay.
+# Verify main.py’s SMTP_SERVER, SMTP_PORT, and FROM_ADDRESS match our environment.
 
 name: Teams Notification Workflow
 
@@ -23,31 +23,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-   
+      # 1) Check out the repository so we can run git and access main.py
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-    
+      # 2) Record the build start timestamp
       - name: Capture build start time
         run: |
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
-     
-      - name: Decode DEPLOY_META_JSON and export keys
+      # 3) Decode DEPLOY_META_JSON and export each field to env vars
+      - name: Decode payload and export keys
         id: parse-json
         run: |
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
           cat deploy-meta.json
-
           for key in $(jq -r 'keys[]' deploy-meta.json); do
             val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
             var=$(echo "$key" | tr '[:lower:]' '[:upper:]')
             echo "$var=$val" >> $GITHUB_ENV
           done
 
-     
+      # 4) (Optional) Build a “facts” array for the Teams card
       - name: Build dynamic facts array
         run: |
           FACTS=$(jq -n '[]')
@@ -62,7 +61,7 @@ jobs:
           echo "$FACTS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
- 
+      # 5) Determine theme color & emoji based on STATUS
       - name: Set status color and emoji
         run: |
           case "$STATUS" in
@@ -88,17 +87,13 @@ jobs:
               ;;
           esac
 
-      
-      # 6) Send the Teams MessageCard with build+release details
-      
-      - name: Send Teams Notification with formatted layout
+      # 6) Send the Teams MessageCard with build + release details
+      - name: Send Teams Notification
         run: |
-          # Capture end time and commit info
           BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           COMMIT_ID=${GITHUB_SHA::8}
           COMMIT_MSG=$(git log -1 --pretty=format:'%s')
 
-          # Build the JSON payload for Teams
           payload=$(jq -n \
             --arg themeColor "$THEME_COLOR" \
             --arg status "$STATUS_MESSAGE" \
@@ -161,20 +156,20 @@ jobs:
             }'
           )
 
-          # Save and post to Teams
           echo "$payload" > message.json
           curl -X POST \
                -H "Content-Type: application/json" \
                -d @message.json \
                "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
-      
-      # 7) Send an email with the same information using mail.py
+      # 7) Send an email with the same information using main.py
       #
-      #   We wrap the JSON payload inside a minimal HTML page
-      #   and then call scripts/mail.py. The mail.py script must
-      #   exist at scripts/mail.py and be executable.
-      #
+      #    We wrap the JSON payload inside a minimal HTML page
+      #    and then call main.py. Ensure main.py is executable or
+      #    invoke it with python3.
+      - name: Make main.py executable
+        run: chmod +x main.py
+
       - name: Send Email Notification to Outlook
         run: |
           # 7a) Generate a simple HTML page that embeds our JSON
@@ -187,15 +182,15 @@ jobs:
           </html>
           EOF
 
-          #  Define your “To” address (distribution list or email)
+          # 7b) Define your “To” address (distribution list or email)
           TO_ADDRESS="yourteam@company.com"
 
-          #  Create a subject line matching the Teams card
+          # 7c) Create a subject line matching the Teams card
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
 
-          #  Invoke our Python mail script
-          python3 scripts/mail.py "$TO_ADDRESS" "$SUBJECT" "email_body.html"
-        # If your relay requires authentication, add:
+          # 7d) Invoke main.py directly (now executable)
+          ./main.py "$TO_ADDRESS" "$SUBJECT" "email_body.html"
+        # If your SMTP relay requires authentication, add:
         # env:
         #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
         #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
