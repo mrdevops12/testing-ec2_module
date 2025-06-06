@@ -23,25 +23,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ─────────────────────────────────────────────────────────
-      # 1) Check out the repo so we can run git commands and
-      #    access scripts/mail.py later on.
-      # ─────────────────────────────────────────────────────────
+   
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      # ─────────────────────────────────────────────────────────
-      # 2) Capture the build start timestamp
-      # ─────────────────────────────────────────────────────────
+    
       - name: Capture build start time
         run: |
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
-      # ─────────────────────────────────────────────────────────
-      # 3) Decode DEPLOY_META_JSON and export each field to env
-      # ─────────────────────────────────────────────────────────
+     
       - name: Decode DEPLOY_META_JSON and export keys
         id: parse-json
         run: |
@@ -54,9 +47,7 @@ jobs:
             echo "$var=$val" >> $GITHUB_ENV
           done
 
-      # ─────────────────────────────────────────────────────────
-      # 4) (Optional) Build a facts array for the Teams card
-      # ─────────────────────────────────────────────────────────
+     
       - name: Build dynamic facts array
         run: |
           FACTS=$(jq -n '[]')
@@ -71,9 +62,7 @@ jobs:
           echo "$FACTS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      # ─────────────────────────────────────────────────────────
-      # 5) Determine theme color & emoji based on STATUS
-      # ─────────────────────────────────────────────────────────
+ 
       - name: Set status color and emoji
         run: |
           case "$STATUS" in
@@ -99,9 +88,9 @@ jobs:
               ;;
           esac
 
-      # ─────────────────────────────────────────────────────────
+      
       # 6) Send the Teams MessageCard with build+release details
-      # ─────────────────────────────────────────────────────────
+      
       - name: Send Teams Notification with formatted layout
         run: |
           # Capture end time and commit info
@@ -179,9 +168,8 @@ jobs:
                -d @message.json \
                "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
-      # ─────────────────────────────────────────────────────────
+      
       # 7) Send an email with the same information using mail.py
-      # ─────────────────────────────────────────────────────────
       #
       #   We wrap the JSON payload inside a minimal HTML page
       #   and then call scripts/mail.py. The mail.py script must
@@ -199,13 +187,13 @@ jobs:
           </html>
           EOF
 
-          # 7b) Define your “To” address (distribution list or email)
+          #  Define your “To” address (distribution list or email)
           TO_ADDRESS="yourteam@company.com"
 
-          # 7c) Create a subject line matching the Teams card
+          #  Create a subject line matching the Teams card
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
 
-          # 7d) Invoke our Python mail script
+          #  Invoke our Python mail script
           python3 scripts/mail.py "$TO_ADDRESS" "$SUBJECT" "email_body.html"
         # If your relay requires authentication, add:
         # env:
