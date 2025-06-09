@@ -1,13 +1,10 @@
 # .github/workflows/teams-notification-source.yml
 #
-# Reusable workflow: 
+# Reusable workflow:
 #   1) notify → Teams (on ubuntu-latest)
 #   2) email  → Outlook (on self-hosted/arc-rs-nonprod)
 #
-# Assumptions:
-#   • mail.py lives at .github/workflows/mail.py
-#   • mail.py defines SMTP_SERVER, SMTP_PORT, FROM_ADDRESS, etc.
-#   • You invoke mail.py with python3.
+# mail.py lives at .github/workflows/mail.py and defines SMTP_SERVER, SMTP_PORT, FROM_ADDRESS, etc.
 
 name: Teams + Email Notification Workflow
 
@@ -151,14 +148,14 @@ jobs:
 
       - name: Build email body
         run: |
-          cat <<'EOF' > email_body.html
-<html>
-  <body>
-    <h2>Build & Release Notification</h2>
-    <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
-  </body>
-</html>
-EOF
+          cat << 'EOF' > email_body.html
+          <html>
+            <body>
+              <h2>Build & Release Notification</h2>
+              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
+            </body>
+          </html>
+          EOF
 
       - name: Send Email Notification to Outlook
         run: |
