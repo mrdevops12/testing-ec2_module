@@ -1,8 +1,13 @@
 # .github/workflows/teams-notification-source.yml
 #
-# Reusable workflow:
-#   1) Teams → ubuntu-latest (fast, public)
-#   2) Email → self-hosted/arc-rs-nonprod (access to your SMTP relay)
+# Reusable workflow: 
+#   1) notify → Teams (on ubuntu-latest)
+#   2) email  → Outlook (on self-hosted/arc-rs-nonprod)
+#
+# Prereqs:
+#   • A scripts/mail.py (or .github/workflows/mail.py) that
+#     reads SMTP_SERVER, SMTP_PORT, FROM_ADDRESS and sends HTML.
+#   • Secrets.SMTP_USERNAME / SMTP_PASSWORD if your relay needs auth.
 
 name: Teams + Email Notification Workflow
 
@@ -20,30 +25,31 @@ on:
         required: true
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Job #1: Teams Only (runs immediately on GH-hosted runners)
-  # ─────────────────────────────────────────────────────────────
+  # ────────────────────────
+  # Job #1: Teams only
+  # ────────────────────────
   notify:
     runs-on: ubuntu-latest
     outputs:
       MESSAGE_JSON: message.json
 
     steps:
-      - uses: actions/checkout@v3
-        name: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
       - name: Capture build start time
-        run: echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
       - name: Decode payload & export fields
         id: parse-json
         run: |
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$val" >> $GITHUB_ENV
+            v=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            echo "$(echo "$key" | tr '[:lower:]' '[:upper:]')=$v" >> $GITHUB_ENV
           done
 
       - name: Build dynamic facts array
@@ -64,9 +70,9 @@ jobs:
         run: |
           case "$STATUS" in
             success)   echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV; echo "STATUS_EMOJI=✅" >> $GITHUB_ENV; echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV;;
-            failed)    echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV; echo "STATUS_EMOJI=❌" >> $GITHUB_ENV; echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV;;
-            cancelled) echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV; echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV; echo "STATUS_MESSAGE=CANCELLED">> $GITHUB_ENV;;
-            *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓" >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV;;
+            failed)    echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV; echo "STATUS_EMOJI=❌" >> $GITHUB_ENV; echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV;;
+            cancelled) echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV; echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV; echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV;;
+            *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓" >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV;;
           esac
 
       - name: Send Teams Notification
@@ -94,7 +100,8 @@ jobs:
               "themeColor":$themeColor,
               "summary":"Build \($status)",
               "sections":[
-                {"activityTitle":"🔧 **Build Information**","facts":[
+                {"activityTitle":"🔧 **Build Information**",
+                 "facts":[
                    {"name":"Status","value":"\($emoji) \($status)"},
                    {"name":"Triggered By","value":$actor},
                    {"name":"Start Time","value":$start},
@@ -102,7 +109,8 @@ jobs:
                    {"name":"Commit","value":$commit},
                    {"name":"Workflow Run","value":"#\($runId)"}
                  ],"markdown":true},
-                {"activityTitle":"🚀 **Release Information**","facts":[
+                {"activityTitle":"🚀 **Release Information**",
+                 "facts":[
                    {"name":"Source Branch","value":"`\($branch)`"},
                    {"name":"Artifact Version","value":"`\($version)`"},
                    {"name":"Application Module","value":$module},
@@ -119,14 +127,14 @@ jobs:
                -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
       - name: Upload message.json for email job
-        uses: actions/upload-artifact@v4    # ← upgraded from v3
+        uses: actions/upload-artifact@v4
         with:
           name: message-json
           path: message.json
 
-  # ─────────────────────────────────────────────────────────────
-  # Job #2: Email via your self-hosted runner (can reach SMTP)
-  # ─────────────────────────────────────────────────────────────
+  # ────────────────────────
+  # Job #2: Email via self-hosted
+  # ────────────────────────
   email:
     needs: notify
     runs-on:
@@ -135,22 +143,22 @@ jobs:
 
     steps:
       - name: Download message.json
-        uses: actions/download-artifact@v4  # ← upgraded from v3
+        uses: actions/download-artifact@v4
         with:
           name: message-json
 
-      - uses: actions/checkout@v3
-        name: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
       - name: Build email body
         run: |
-          cat << 'EOF' > email_body.html
+          cat <<EOF > email_body.html
           <html>
             <body>
               <h2>Build & Release Notification</h2>
-              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
+              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -r . message.json)</pre>
             </body>
           </html>
           EOF
