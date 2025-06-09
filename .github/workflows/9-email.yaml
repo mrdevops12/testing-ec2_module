@@ -1,13 +1,11 @@
 # .github/workflows/teams-notification-source.yml
 #
-# Reusable workflow: 
+# Reusable workflow:
 #   1) notify → Teams (on ubuntu-latest)
 #   2) email  → Outlook (on self-hosted/arc-rs-nonprod)
 #
-# Assumptions:
-#   • mail.py lives at .github/workflows/mail.py
-#   • mail.py uses our SMTP relay (SMTP_SERVER, SMTP_PORT, FROM_ADDRESS)
-#   • You do not need to rename mail.py; we invoke it with python3.
+# mail.py must live at .github/workflows/mail.py
+# and use your SMTP relay (SMTP_SERVER, SMTP_PORT, FROM_ADDRESS).
 
 name: Teams + Email Notification Workflow
 
@@ -15,7 +13,7 @@ on:
   workflow_call:
     inputs:
       DEPLOY_META_JSON:
-        description: 'Base64-encoded JSON with deployment metadata'
+        description: 'Base64‐encoded JSON with deployment metadata'
         required: true
         type: string
 
@@ -25,9 +23,9 @@ on:
         required: true
 
 jobs:
-  # ────────────────────────
-  # Job #1: Teams only
-  # ────────────────────────
+  # ─────────────────────────
+  # Job #1: Send Teams card
+  # ─────────────────────────
   notify:
     runs-on: ubuntu-latest
     outputs:
@@ -48,18 +46,18 @@ jobs:
         run: |
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            v=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$v" >> $GITHUB_ENV
+            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$value" >> $GITHUB_ENV
           done
 
       - name: Build dynamic facts array
         run: |
           FACTS=$(jq -n '[]')
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
             label=$(echo $key | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
-            FACTS=$(echo "$FACTS" | jq --arg name "$label" --arg value "$val" \
-                     '. += [{"name": $name, "value": $value}]')
+            FACTS=$(echo "$FACTS" | jq --arg name "$label" --arg value "$value" \
+                      '. += [{"name": $name, "value": $value}]')
           done
           echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
           echo "$FACTS" >> $GITHUB_ENV
@@ -68,15 +66,31 @@ jobs:
       - name: Set theme color & emoji
         run: |
           case "$STATUS" in
-            success)   echo "THEME_COLOR=#00FF00"     >> $GITHUB_ENV; echo "STATUS_EMOJI=✅" >> $GITHUB_ENV; echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV;;
-            failed)    echo "THEME_COLOR=#FF0000"     >> $GITHUB_ENV; echo "STATUS_EMOJI=❌" >> $GITHUB_ENV; echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV;;
-            cancelled) echo "THEME_COLOR=#FFA500"     >> $GITHUB_ENV; echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV; echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV;;
-            *)         echo "THEME_COLOR=#808080"     >> $GITHUB_ENV; echo "STATUS_EMOJI=❓" >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV;;
+            success)
+              echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=✅"       >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
+              ;;
+            failed)
+              echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❌"       >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV
+              ;;
+            cancelled)
+              echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=⚠️"       >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "THEME_COLOR=#808080" >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❓"       >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV
+              ;;
           esac
 
       - name: Send Teams Notification
         run: |
-          BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
           COMMIT_ID=${GITHUB_SHA::8}
           COMMIT_MSG=$(git log -1 --pretty=format:'%s')
 
@@ -122,8 +136,10 @@ jobs:
               ]
             }' > message.json
 
-          curl -X POST -H "Content-Type: application/json" \
-               -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
+          curl -X POST \
+               -H "Content-Type: application/json" \
+               -d @message.json \
+               "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
       - name: Upload message.json for email job
         uses: actions/upload-artifact@v4
@@ -131,9 +147,9 @@ jobs:
           name: message-json
           path: message.json
 
-  # ────────────────────────
-  # Job #2: Email via self-hosted
-  # ────────────────────────
+  # ─────────────────────────
+  # Job #2: Send email (self-hosted)
+  # ─────────────────────────
   email:
     needs: notify
     runs-on: arc-rs-nonprod
@@ -151,7 +167,6 @@ jobs:
 
       - name: Build email body
         run: |
-          # unquoted heredoc so $(jq) expands
           cat <<EOF > email_body.html
           <html>
             <body>
@@ -168,7 +183,7 @@ EOF
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
           python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
-        # If your SMTP relay requires auth, uncomment:
+        # If SMTP relay needs authentication, uncomment:
         # env:
         #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
         #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
