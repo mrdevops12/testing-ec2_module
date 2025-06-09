@@ -1,11 +1,13 @@
 # .github/workflows/teams-notification-source.yml
 #
 # Reusable workflow:
-#   1) notify → Teams (on ubuntu-latest)
-#   2) email  → Outlook (on self-hosted/arc-rs-nonprod)
+#  - Job “notify”: post to Teams (ubuntu-latest)
+#  - Job “email”:  send the same info via mail.py (self-hosted)
 #
-# mail.py must live at .github/workflows/mail.py
-# and use your SMTP relay (SMTP_SERVER, SMTP_PORT, FROM_ADDRESS).
+# Assumptions:
+#  • mail.py lives at .github/workflows/mail.py
+#  • mail.py knows SMTP_SERVER, SMTP_PORT, FROM_ADDRESS internally
+#  • message.json is shared via the upload/download–artifact actions
 
 name: Teams + Email Notification Workflow
 
@@ -13,7 +15,7 @@ on:
   workflow_call:
     inputs:
       DEPLOY_META_JSON:
-        description: 'Base64‐encoded JSON with deployment metadata'
+        description: 'Base64-encoded JSON with deployment metadata'
         required: true
         type: string
 
@@ -23,9 +25,9 @@ on:
         required: true
 
 jobs:
-  # ─────────────────────────
-  # Job #1: Send Teams card
-  # ─────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1) notify → Teams
+  # ─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
     outputs:
@@ -45,52 +47,39 @@ jobs:
         id: parse-json
         run: |
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
+
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$value" >> $GITHUB_ENV
+            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            UPPER=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            echo "$UPPER=$val" >> $GITHUB_ENV
           done
 
       - name: Build dynamic facts array
         run: |
           FACTS=$(jq -n '[]')
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            label=$(echo $key | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
-            FACTS=$(echo "$FACTS" | jq --arg name "$label" --arg value "$value" \
-                      '. += [{"name": $name, "value": $value}]')
+            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            label=$(echo "$key" | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
+            FACTS=$(echo "$FACTS" \
+              | jq --arg name "$label" --arg value "$val" \
+                   '. += [{"name": $name, "value": $value}]')
           done
           echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
-          echo "$FACTS" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "$FACTS"            >> $GITHUB_ENV
+          echo "EOF"               >> $GITHUB_ENV
 
       - name: Set theme color & emoji
         run: |
           case "$STATUS" in
-            success)
-              echo "THEME_COLOR=#00FF00"     >> $GITHUB_ENV
-              echo "STATUS_EMOJI=✅"          >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
-              ;;
-            failed)
-              echo "THEME_COLOR=#FF0000"     >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❌"          >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV
-              ;;
-            cancelled)
-              echo "THEME_COLOR=#FFA500"     >> $GITHUB_ENV
-              echo "STATUS_EMOJI=⚠️"         >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
-              ;;
-            *)
-              echo "THEME_COLOR=#808080"     >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❓"          >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV
-              ;;
+            success)   echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV; echo "STATUS_EMOJI=✅"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV;;
+            failed)    echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV; echo "STATUS_EMOJI=❌"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV;;
+            cancelled) echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV; echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV; echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV;;
+            *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV;;
           esac
 
       - name: Send Teams Notification
         run: |
-          BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           COMMIT_ID=${GITHUB_SHA::8}
           COMMIT_MSG=$(git log -1 --pretty=format:'%s')
 
@@ -111,10 +100,9 @@ jobs:
             '{
               "@type":"MessageCard","@context":"https://schema.org/extensions",
               "themeColor":$themeColor,
-              "summary":"Build \($status)",
+              "summary":"Build & Release Notification",
               "sections":[
-                {"activityTitle":"🔧 **Build Information**",
-                 "facts":[
+                {"activityTitle":"🔧 **Build Information**","facts":[
                    {"name":"Status","value":"\($emoji) \($status)"},
                    {"name":"Triggered By","value":$actor},
                    {"name":"Start Time","value":$start},
@@ -122,8 +110,7 @@ jobs:
                    {"name":"Commit","value":$commit},
                    {"name":"Workflow Run","value":"#\($runId)"}
                  ],"markdown":true},
-                {"activityTitle":"🚀 **Release Information**",
-                 "facts":[
+                {"activityTitle":"🚀 **Release Information**","facts":[
                    {"name":"Source Branch","value":"`\($branch)`"},
                    {"name":"Artifact Version","value":"`\($version)`"},
                    {"name":"Application Module","value":$module},
@@ -136,27 +123,25 @@ jobs:
               ]
             }' > message.json
 
-          curl -X POST \
-               -H "Content-Type: application/json" \
-               -d @message.json \
-               "${{ secrets.TEAMS_WEBHOOK_URL }}"
+          curl -X POST -H "Content-Type: application/json" \
+               -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
-      - name: Upload message.json for email job
-        uses: actions/upload-artifact@v4
+      - name: Upload message.json
+        uses: actions/upload-artifact@v3
         with:
           name: message-json
           path: message.json
 
-  # ─────────────────────────
-  # Job #2: Send email (self-hosted)
-  # ─────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2) email → Outlook (self-hosted runner!)
+  # ─────────────────────────────────────────────────────────────────────────────
   email:
     needs: notify
     runs-on: arc-rs-nonprod
 
     steps:
       - name: Download message.json
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: message-json
 
@@ -168,20 +153,20 @@ jobs:
       - name: Build email body
         run: |
           cat <<EOF > email_body.html
-          <html>
-            <body>
-              <h2>Build & Release Notification</h2>
-              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
-            </body>
-          </html>
-          EOF
+<html>
+  <body>
+    <h2>Build & Release Notification</h2>
+    <pre style="font-family: monospace; white-space: pre-wrap;">$(jq . message.json)</pre>
+  </body>
+</html>
+EOF
 
       - name: Send Email Notification to Outlook
         run: |
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
           python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
-        # If your SMTP relay needs authentication, uncomment:
+        # If your SMTP relay needs auth, uncomment:
         # env:
         #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
         #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
