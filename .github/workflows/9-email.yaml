@@ -4,10 +4,10 @@
 #   1) notify → Teams (on ubuntu-latest)
 #   2) email  → Outlook (on self-hosted/arc-rs-nonprod)
 #
-# Prereqs:
-#   • A scripts/mail.py (or .github/workflows/mail.py) that
-#     reads SMTP_SERVER, SMTP_PORT, FROM_ADDRESS and sends HTML.
-#   • Secrets.SMTP_USERNAME / SMTP_PASSWORD if your relay needs auth.
+# Assumptions:
+#   • mail.py lives at .github/workflows/mail.py
+#   • mail.py uses our SMTP relay (SMTP_SERVER, SMTP_PORT, FROM_ADDRESS)
+#   • You do not need to rename mail.py; we invoke it with python3.
 
 name: Teams + Email Notification Workflow
 
@@ -40,8 +40,7 @@ jobs:
           fetch-depth: 1
 
       - name: Capture build start time
-        run: |
-          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+        run: echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
       - name: Decode payload & export fields
         id: parse-json
@@ -49,7 +48,7 @@ jobs:
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
           for key in $(jq -r 'keys[]' deploy-meta.json); do
             v=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            echo "$(echo "$key" | tr '[:lower:]' '[:upper:]')=$v" >> $GITHUB_ENV
+            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$v" >> $GITHUB_ENV
           done
 
       - name: Build dynamic facts array
@@ -58,9 +57,8 @@ jobs:
           for key in $(jq -r 'keys[]' deploy-meta.json); do
             val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
             label=$(echo "$key" | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
-            FACTS=$(echo "$FACTS" \
-              | jq --arg name "$label" --arg value "$val" \
-                   '. += [{"name": $name, "value": $value}]')
+            FACTS=$(echo "$FACTS" | jq --arg name "$label" --arg value "$val" \
+                     '. += [{"name": $name, "value": $value}]')
           done
           echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
           echo "$FACTS" >> $GITHUB_ENV
@@ -80,7 +78,6 @@ jobs:
           BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           COMMIT_ID=${GITHUB_SHA::8}
           COMMIT_MSG=$(git log -1 --pretty=format:'%s')
-
           jq -n \
             --arg themeColor "$THEME_COLOR" \
             --arg status "$STATUS_MESSAGE" \
@@ -122,12 +119,11 @@ jobs:
                 {"@type":"OpenUri","name":"View Branch Commits","targets":[{"os":"default","uri":"https://github.com/\($repo)/commits/\($branch)"}]}
               ]
             }' > message.json
-
           curl -X POST -H "Content-Type: application/json" \
                -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
       - name: Upload message.json for email job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: message-json
           path: message.json
@@ -137,13 +133,11 @@ jobs:
   # ────────────────────────
   email:
     needs: notify
-    runs-on:
-      - self-hosted
-      - arc-rs-nonprod
+    runs-on: arc-rs-nonprod
 
     steps:
       - name: Download message.json
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: message-json
 
@@ -158,7 +152,9 @@ jobs:
           <html>
             <body>
               <h2>Build & Release Notification</h2>
-              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -r . message.json)</pre>
+              <pre style="font-family: monospace; white-space: pre-wrap;">
+$(jq -C . message.json)
+              </pre>
             </body>
           </html>
           EOF
@@ -168,7 +164,4 @@ jobs:
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
           python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
-        # If SMTP needs auth, uncomment:
-        # env:
-        #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-        #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        
