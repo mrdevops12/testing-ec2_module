@@ -1,0 +1,174 @@
+# .github/workflows/teams-notification-source.yml
+#
+# Reusable workflow: 
+#   1) Send a formatted MessageCard to Teams
+#   2) Send the same info via email (call mail.py)
+#
+# mail.py must live at .github/workflows/mail.py and
+# use your SMTP relay (no extra GH secrets needed unless
+# you uncomment the SMTP_USERNAME / SMTP_PASSWORD below).
+
+name: Teams Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      DEPLOY_META_JSON:
+        description: 'Base64-encoded JSON with deployment metadata'
+        required: true
+        type: string
+
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams Incoming Webhook URL'
+        required: true
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Pull down your code so `git log` and `mail.py` are available
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      # 2) Stamp the build start
+      - name: Capture build start time
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      # 3) Decode the JSON payload into env vars
+      - name: Decode payload and export keys
+        id: parse-json
+        run: |
+          echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
+          for key in $(jq -r 'keys[]' deploy-meta.json); do
+            v=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            echo "$(echo $key | tr '[:lower:]' '[:upper:]')=$v" >> $GITHUB_ENV
+          done
+
+      # 4) (Optional) Build the “facts” array for Teams
+      - name: Build dynamic facts array
+        run: |
+          FACTS=$(jq -n '[]')
+          for key in $(jq -r 'keys[]' deploy-meta.json); do
+            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            label=$(echo "$key" | sed 's/_/ /g' | sed -E 's/\b(\w)/\u\1/g')
+            FACTS=$(echo "$FACTS" \
+              | jq --arg name "$label" --arg value "$val" \
+                   '. += [{"name": $name, "value": $value}]')
+          done
+          echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
+          echo "$FACTS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # 5) Choose a color & emoji based on STATUS
+      - name: Set status color and emoji
+        run: |
+          case "$STATUS" in
+            success)
+              echo "THEME_COLOR=#00FF00"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=✅"          >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
+              ;;
+            failed)
+              echo "THEME_COLOR=#FF0000"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❌"          >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV
+              ;;
+            cancelled)
+              echo "THEME_COLOR=#FFA500"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=⚠️"         >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "THEME_COLOR=#808080"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❓"          >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV
+              ;;
+          esac
+
+      # 6) Post to Teams
+      - name: Send Teams Notification
+        run: |
+          BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          COMMIT_ID=${GITHUB_SHA::8}
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+
+          jq -n \
+            --arg themeColor "$THEME_COLOR" \
+            --arg status "$STATUS_MESSAGE" \
+            --arg emoji "$STATUS_EMOJI" \
+            --arg actor "${{ github.actor }}" \
+            --arg start "$BUILD_START" \
+            --arg end "$BUILD_END" \
+            --arg commit "${COMMIT_ID} - ${COMMIT_MSG}" \
+            --arg runId "${{ github.run_number }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "$BRANCH" \
+            --arg version "$VERSION" \
+            --arg module "$PRODUCT" \
+            --arg env "$ENV" \
+            '{
+              "@type":"MessageCard","@context":"https://schema.org/extensions",
+              "themeColor":$themeColor,
+              "summary":"Build \($status)",
+              "sections":[
+                {"activityTitle":"🔧 **Build Information**",
+                 "facts":[
+                   {"name":"Status","value":"\($emoji) \($status)"},
+                   {"name":"Triggered By","value":$actor},
+                   {"name":"Start Time","value":$start},
+                   {"name":"End Time","value":$end},
+                   {"name":"Commit","value":$commit},
+                   {"name":"Workflow Run","value":"#\($runId)"}
+                 ],"markdown":true},
+                {"activityTitle":"🚀 **Release Information**",
+                 "facts":[
+                   {"name":"Source Branch","value":"`\($branch)`"},
+                   {"name":"Artifact Version","value":"`\($version)`"},
+                   {"name":"Application Module","value":$module},
+                   {"name":"Environment","value":$env}
+                 ],"markdown":true}
+              ],
+              "potentialAction":[
+                {"@type":"OpenUri","name":"View Workflow Run","targets":[{"os":"default","uri":"https://github.com/\($repo)/actions/runs/\($runId)"}]},
+                {"@type":"OpenUri","name":"View Branch Commits","targets":[{"os":"default","uri":"https://github.com/\($repo)/commits/\($branch)"}]}
+              ]
+            }' > message.json
+
+          curl -X POST -H "Content-Type: application/json" \
+               -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
+
+      # 7) Send the identical info by email via mail.py
+      - name: Send Email Notification to Outlook
+        run: |
+          # build a minimal HTML wrapper
+          cat << 'EOF' > email_body.html
+          <html>
+            <body>
+              <h2>Build & Release Notification</h2>
+              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
+            </body>
+          </html>
+          EOF
+
+          # your destination (group or personal mailbox)
+          TO_ADDRESS="yourname@yourcompany.com"
+
+          # matching subject
+          SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
+
+          # finally, invoke mail.py
+          python3 .github/workflows/mail.py \
+            "$TO_ADDRESS" \
+            "$SUBJECT" \
+            "email_body.html"
+
+        # if your relay *does* need authentication, uncomment:
+        # env:
+        #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+        #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+
