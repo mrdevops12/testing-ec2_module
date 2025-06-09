@@ -67,24 +67,24 @@ jobs:
         run: |
           case "$STATUS" in
             success)
-              echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=✅"       >> $GITHUB_ENV
+              echo "THEME_COLOR=#00FF00"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=✅"          >> $GITHUB_ENV
               echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
               ;;
             failed)
-              echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❌"       >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV
+              echo "THEME_COLOR=#FF0000"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❌"          >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV
               ;;
             cancelled)
-              echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=⚠️"       >> $GITHUB_ENV
+              echo "THEME_COLOR=#FFA500"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=⚠️"         >> $GITHUB_ENV
               echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
               ;;
             *)
-              echo "THEME_COLOR=#808080" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❓"       >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV
+              echo "THEME_COLOR=#808080"     >> $GITHUB_ENV
+              echo "STATUS_EMOJI=❓"          >> $GITHUB_ENV
+              echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV
               ;;
           esac
 
@@ -171,19 +171,17 @@ jobs:
           <html>
             <body>
               <h2>Build & Release Notification</h2>
-              <pre style="font-family: monospace; white-space: pre-wrap;">
-$(jq -C . message.json)
-              </pre>
+              <pre style="font-family: monospace; white-space: pre-wrap;">$(jq -C . message.json)</pre>
             </body>
           </html>
-EOF
+          EOF
 
       - name: Send Email Notification to Outlook
         run: |
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
           python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
-        # If SMTP relay needs authentication, uncomment:
+        # If your SMTP relay needs authentication, uncomment:
         # env:
         #   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
         #   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
