@@ -127,9 +127,7 @@ jobs:
   # ────────────────────────
   email:
     needs: notify
-    runs-on:
-      - self-hosted
-      - arc-rs-nonprod
+    runs-on: arc-rs-nonprod
 
     steps:
       - name: Download message.json
