@@ -47,7 +47,7 @@ jobs:
             *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV ;;
           esac
 
-      - name: Send Teams Notification
+      - name: Build message.json for Teams
         run: |
           BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           COMMIT_ID=${GITHUB_SHA::8}
@@ -67,33 +67,49 @@ jobs:
             --arg module "$PRODUCT" \
             --arg env "$ENV" \
             '{
-              "@type":"MessageCard","@context":"https://schema.org/extensions",
-              "themeColor":$themeColor,
-              "summary":"Build \($status)",
-              "sections":[
-                {"activityTitle":"🔧 **Build Information**",
-                 "facts":[
-                   {"name":"Status","value":"\($emoji) \($status)"},
-                   {"name":"Triggered By","value":$actor},
-                   {"name":"Start Time","value":$start},
-                   {"name":"End Time","value":$end},
-                   {"name":"Commit","value":$commit},
-                   {"name":"Workflow Run","value":"#\($runId)"}
-                 ], "markdown":true},
-                {"activityTitle":"🚀 **Release Information**",
-                 "facts":[
-                   {"name":"Source Branch","value":"`\($branch)`"},
-                   {"name":"Artifact Version","value":"`\($version)`"},
-                   {"name":"Application Module","value":$module},
-                   {"name":"Environment","value":$env}
-                 ], "markdown":true}
+              "@type": "MessageCard", "@context": "https://schema.org/extensions",
+              "themeColor": $themeColor,
+              "summary": "Build \($status)",
+              "sections": [
+                {
+                  "activityTitle": "🔧 **Build Information**",
+                  "facts": [
+                    {"name": "Status", "value": "\($emoji) \($status)"},
+                    {"name": "Triggered By", "value": $actor},
+                    {"name": "Start Time", "value": $start},
+                    {"name": "End Time", "value": $end},
+                    {"name": "Commit", "value": $commit},
+                    {"name": "Workflow Run", "value": "#\($runId)"}
+                  ],
+                  "markdown": true
+                },
+                {
+                  "activityTitle": "🚀 **Release Information**",
+                  "facts": [
+                    {"name": "Source Branch", "value": "`\($branch)`"},
+                    {"name": "Artifact Version", "value": "`\($version)`"},
+                    {"name": "Application Module", "value": $module},
+                    {"name": "Environment", "value": $env}
+                  ],
+                  "markdown": true
+                }
               ],
-              "potentialAction":[
-                {"@type":"OpenUri","name":"View Workflow Run","targets":[{"os":"default","uri":"https://github.com/\($repo)/actions/runs/\($runId)"}]},
-                {"@type":"OpenUri","name":"View Branch Commits","targets":[{"os":"default","uri":"https://github.com/\($repo)/commits/\($branch)"}]}
+              "potentialAction": [
+                {
+                  "@type": "OpenUri",
+                  "name": "View Workflow Run",
+                  "targets": [{"os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)"}]
+                },
+                {
+                  "@type": "OpenUri",
+                  "name": "View Branch Commits",
+                  "targets": [{"os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)"}]
+                }
               ]
             }' > message.json
 
+      - name: Send Teams Notification
+        run: |
           curl -X POST -H "Content-Type: application/json" \
                -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
@@ -108,36 +124,30 @@ jobs:
     runs-on: arc-rs-nonprod
 
     steps:
-      - name: Checkout reusable workflow repo
-        uses: actions/checkout@v4
-        with:
-          repository: quest-diagnostics/qdx-reusable-workflows
-          ref: teams_email_notification
-          path: reusable-workflows
-
       - name: Download message.json
         uses: actions/download-artifact@v4
         with:
           name: message-json
-          path: .
 
-      - name: Debug - Check mail.py presence
-        run: ls -la ./reusable-workflows/.github/workflows/
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Build email body
+      - name: Build email body as HTML table
         run: |
           jq -r '
-            "<html><body><h2>Build & Release Notification</h2><table>" +
-            "<tr><td><strong>Status:</strong></td><td>" + .sections[0].facts[0].value + "</td></tr>" +
-            "<tr><td><strong>Triggered By:</strong></td><td>" + .sections[0].facts[1].value + "</td></tr>" +
-            "<tr><td><strong>Start Time:</strong></td><td>" + .sections[0].facts[2].value + "</td></tr>" +
-            "<tr><td><strong>End Time:</strong></td><td>" + .sections[0].facts[3].value + "</td></tr>" +
-            "<tr><td><strong>Commit:</strong></td><td>" + .sections[0].facts[4].value + "</td></tr>" +
-            "<tr><td><strong>Workflow Run:</strong></td><td>" + .sections[0].facts[5].value + "</td></tr>" +
-            "<tr><td><strong>Source Branch:</strong></td><td>" + .sections[1].facts[0].value + "</td></tr>" +
-            "<tr><td><strong>Artifact Version:</strong></td><td>" + .sections[1].facts[1].value + "</td></tr>" +
-            "<tr><td><strong>Application Module:</strong></td><td>" + .sections[1].facts[2].value + "</td></tr>" +
-            "<tr><td><strong>Environment:</strong></td><td>" + .sections[1].facts[3].value + "</td></tr>" +
+            "<html><body><h2>Build & Release Notification</h2><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">" +
+            "<tr><td><b>Status</b></td><td>" + .sections[0].facts[0].value + "</td></tr>" +
+            "<tr><td><b>Triggered By</b></td><td>" + .sections[0].facts[1].value + "</td></tr>" +
+            "<tr><td><b>Start Time</b></td><td>" + .sections[0].facts[2].value + "</td></tr>" +
+            "<tr><td><b>End Time</b></td><td>" + .sections[0].facts[3].value + "</td></tr>" +
+            "<tr><td><b>Commit</b></td><td>" + .sections[0].facts[4].value + "</td></tr>" +
+            "<tr><td><b>Workflow Run</b></td><td>" + .sections[0].facts[5].value + "</td></tr>" +
+            "<tr><td><b>Source Branch</b></td><td>" + .sections[1].facts[0].value + "</td></tr>" +
+            "<tr><td><b>Artifact Version</b></td><td>" + .sections[1].facts[1].value + "</td></tr>" +
+            "<tr><td><b>Application Module</b></td><td>" + .sections[1].facts[2].value + "</td></tr>" +
+            "<tr><td><b>Environment</b></td><td>" + .sections[1].facts[3].value + "</td></tr>" +
             "</table>" +
             "<p><a href=\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Workflow Run</a></p>" +
             "<p><a href=\"https://github.com/${{ github.repository }}/commits/$BRANCH\">View Branch Commits</a></p>" +
@@ -148,4 +158,4 @@ jobs:
         run: |
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
-          python3 ./reusable-workflows/.github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
+          python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
