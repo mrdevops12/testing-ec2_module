@@ -1,4 +1,4 @@
-name: Teams Notification Workflow
+name: Teams + Email Notification Workflow
 
 on:
   workflow_call:
@@ -7,102 +7,166 @@ on:
         description: 'Base64-encoded JSON with deployment metadata'
         required: true
         type: string
+
     secrets:
       TEAMS_WEBHOOK_URL:
         description: 'Teams Incoming Webhook URL'
         required: true
 
 jobs:
-  send-notification:
+  notify:
     runs-on: ubuntu-latest
+    outputs:
+      MESSAGE_JSON: message.json
+
     steps:
-      - name: Decode DEPLOY_META_JSON and export keys
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Capture build start time
+        run: echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      - name: Decode payload & export fields
         id: parse-json
         run: |
           echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > deploy-meta.json
-          cat deploy-meta.json
-
           for key in $(jq -r 'keys[]' deploy-meta.json); do
-            value=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            var_name=$(echo "$key" | tr '[:lower:]' '[:upper:]')
-            echo "$var_name=$value" >> $GITHUB_ENV
-            echo "Exported: $var_name=$value"
+            v=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
+            UPPER=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            echo "$UPPER=$v" >> $GITHUB_ENV
           done
 
-          # Build dynamic facts array
-          FACTS=$(jq -n '[]')
-          for key in $(jq -r 'keys[]' deploy-meta.json); do
-            val=$(jq -r --arg k "$key" '.[$k]' deploy-meta.json)
-            label=$(echo "$key" | sed 's/_/ /g' | sed -E "s/\b(\w)/\u\1/g")
-            FACTS=$(echo "$FACTS" | jq --arg name "$label" --arg value "$val" '. += [{"name": $name, "value": $value}]')
-          done
-          echo "FACTS_JSON<<EOF" >> $GITHUB_ENV
-          echo "$FACTS" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      - name: Set status color and emoji
+      - name: Set theme color & emoji
         run: |
           case "$STATUS" in
-            success)
-              echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=✅" >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV
-              ;;
-            failure)
-              echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❌" >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=FAILED" >> $GITHUB_ENV
-              ;;
-            cancelled)
-              echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV
-              ;;
-            *)
-              echo "THEME_COLOR=#808080" >> $GITHUB_ENV
-              echo "STATUS_EMOJI=❓" >> $GITHUB_ENV
-              echo "STATUS_MESSAGE=UNKNOWN" >> $GITHUB_ENV
-              ;;
+            success)   echo "THEME_COLOR=#00FF00" >> $GITHUB_ENV; echo "STATUS_EMOJI=✅"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=SUCCESSFUL" >> $GITHUB_ENV ;;
+            failed)    echo "THEME_COLOR=#FF0000" >> $GITHUB_ENV; echo "STATUS_EMOJI=❌"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=FAILED"    >> $GITHUB_ENV ;;
+            cancelled) echo "THEME_COLOR=#FFA500" >> $GITHUB_ENV; echo "STATUS_EMOJI=⚠️" >> $GITHUB_ENV; echo "STATUS_MESSAGE=CANCELLED" >> $GITHUB_ENV ;;
+            *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV ;;
           esac
 
-      - name: Send Teams Notification with dynamic facts
+      - name: Build message.json for Teams
         run: |
-          DEPLOYMENT_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          payload=$(jq -n \
+          BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          COMMIT_ID=${GITHUB_SHA::8}
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+          jq -n \
             --arg themeColor "$THEME_COLOR" \
-            --arg emoji "$STATUS_EMOJI" \
             --arg status "$STATUS_MESSAGE" \
-            --arg time "$DEPLOYMENT_TIME" \
-            --arg repo "${{ github.repository }}" \
+            --arg emoji "$STATUS_EMOJI" \
             --arg actor "${{ github.actor }}" \
-            --arg runId "${{ github.run_id }}" \
-            --arg productName "$PRODUCT" \
-            --argjson facts "$FACTS_JSON" \
+            --arg start "$BUILD_START" \
+            --arg end "$BUILD_END" \
+            --arg commit "${COMMIT_ID} - ${COMMIT_MSG}" \
+            --arg runId "${{ github.run_number }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "$BRANCH" \
+            --arg version "$VERSION" \
+            --arg module "$PRODUCT" \
+            --arg env "$ENV" \
             '{
-              "@type": "MessageCard",
-              "@context": "https://schema.org/extensions",
+              "@type": "MessageCard", "@context": "https://schema.org/extensions",
               "themeColor": $themeColor,
-              "summary": "Deployment \($status)",
-              "title": "\($emoji) Deployment \($status) - \($productName)",
-              "sections": [{
-                "activityTitle": "**Deployment Details**",
-                "facts": $facts,
-                "markdown": true
-              }],
+              "summary": "Build \($status)",
+              "sections": [
+                {
+                  "activityTitle": "🔧 **Build Information**",
+                  "facts": [
+                    {"name": "Status", "value": "\($emoji) \($status)"},
+                    {"name": "Triggered By", "value": $actor},
+                    {"name": "Start Time", "value": $start},
+                    {"name": "End Time", "value": $end},
+                    {"name": "Commit", "value": $commit},
+                    {"name": "Workflow Run", "value": "#\($runId)"}
+                  ],
+                  "markdown": true
+                },
+                {
+                  "activityTitle": "🚀 **Release Information**",
+                  "facts": [
+                    {"name": "Source Branch", "value": "`\($branch)`"},
+                    {"name": "Artifact Version", "value": "`\($version)`"},
+                    {"name": "Application Module", "value": $module},
+                    {"name": "Environment", "value": $env}
+                  ],
+                  "markdown": true
+                }
+              ],
               "potentialAction": [
                 {
                   "@type": "OpenUri",
                   "name": "View Workflow Run",
-                  "targets": [{ "os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)" }]
+                  "targets": [{"os": "default", "uri": "https://github.com/\($repo)/actions/runs/\($runId)"}]
                 },
                 {
                   "@type": "OpenUri",
                   "name": "View Branch Commits",
-                  "targets": [{ "os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)" }]
+                  "targets": [{"os": "default", "uri": "https://github.com/\($repo)/commits/\($branch)"}]
                 }
               ]
-            }')
+            }' > message.json
 
-          echo "$payload" > message.json
-          curl -X POST -H "Content-Type: application/json" -d @message.json "$TEAMS_WEBHOOK_URL"
+      - name: Check that message.json exists before upload
+        run: |
+          echo "Checking if message.json was created:"
+          ls -la message.json || echo "message.json NOT FOUND"
+          echo "---"
+          cat message.json || echo "Empty or not created"
+
+      - name: Upload message.json for email job
+        uses: actions/upload-artifact@v4
+        with:
+          name: message-json
+          path: message.json
+          retention-days: 1
+
+  email:
+    needs: notify
+    runs-on: arc-rs-nonprod
+
+    steps:
+      - name: Download message.json
+        uses: actions/download-artifact@v4
+        with:
+          name: message-json
+          path: .
+
+      - name: Confirm message.json was downloaded
+        run: |
+          echo "Checking if message.json was downloaded:"
+          ls -la message.json || echo "message.json NOT FOUND"
+          echo "---"
+          cat message.json || echo "Empty or not downloaded"
+
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build email body as HTML table
+        run: |
+          jq -r '
+            "<html><body><h2>Build & Release Notification</h2><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">" +
+            "<tr><td><b>Status</b></td><td>" + .sections[0].facts[0].value + "</td></tr>" +
+            "<tr><td><b>Triggered By</b></td><td>" + .sections[0].facts[1].value + "</td></tr>" +
+            "<tr><td><b>Start Time</b></td><td>" + .sections[0].facts[2].value + "</td></tr>" +
+            "<tr><td><b>End Time</b></td><td>" + .sections[0].facts[3].value + "</td></tr>" +
+            "<tr><td><b>Commit</b></td><td>" + .sections[0].facts[4].value + "</td></tr>" +
+            "<tr><td><b>Workflow Run</b></td><td>" + .sections[0].facts[5].value + "</td></tr>" +
+            "<tr><td><b>Source Branch</b></td><td>" + .sections[1].facts[0].value + "</td></tr>" +
+            "<tr><td><b>Artifact Version</b></td><td>" + .sections[1].facts[1].value + "</td></tr>" +
+            "<tr><td><b>Application Module</b></td><td>" + .sections[1].facts[2].value + "</td></tr>" +
+            "<tr><td><b>Environment</b></td><td>" + .sections[1].facts[3].value + "</td></tr>" +
+            "</table>" +
+            "<p><a href=\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Workflow Run</a></p>" +
+            "<p><a href=\"https://github.com/${{ github.repository }}/commits/$BRANCH\">View Branch Commits</a></p>" +
+            "</body></html>"
+          ' message.json > email_body.html
+
+      - name: Send Email Notification to Outlook
+        run: |
+          TO_ADDRESS="yourname@yourcompany.com"
+          SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
+          python3 .github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
