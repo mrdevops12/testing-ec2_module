@@ -111,7 +111,7 @@ jobs:
       - name: Checkout reusable workflow repo
         uses: actions/checkout@v4
         with:
-          repository: your-org-or-username/qdx-reusable-workflows
+          repository: quest-diagnostics/qdx-reusable-workflows
           ref: teams_email_notification
           path: reusable-workflows
 
@@ -121,10 +121,8 @@ jobs:
           name: message-json
           path: .
 
-      - name: Debug - Verify files and variables
-        run: |
-          ls -la
-          echo "BRANCH: $BRANCH"
+      - name: Debug - Check mail.py presence
+        run: ls -la ./reusable-workflows/.github/workflows/
 
       - name: Build email body
         run: |
@@ -150,4 +148,4 @@ jobs:
         run: |
           TO_ADDRESS="yourname@yourcompany.com"
           SUBJECT="[$(date -u +'%Y-%m-%d %H:%M UTC')] Build #${{ github.run_number }}: $STATUS_MESSAGE"
-          python3 reusable-workflows/.github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
+          python3 ./reusable-workflows/.github/workflows/mail.py "$TO_ADDRESS" "$SUBJECT" email_body.html
