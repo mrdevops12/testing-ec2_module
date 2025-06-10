@@ -47,6 +47,17 @@ jobs:
             *)         echo "THEME_COLOR=#808080" >> $GITHUB_ENV; echo "STATUS_EMOJI=❓"  >> $GITHUB_ENV; echo "STATUS_MESSAGE=UNKNOWN"   >> $GITHUB_ENV ;;
           esac
 
+      - name: Set default values for message fields
+        run: |
+          : "${BRANCH:=main}"
+          : "${VERSION:=0.0.1}"
+          : "${PRODUCT:=unknown-module}"
+          : "${ENV:=dev}"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "PRODUCT=$PRODUCT" >> $GITHUB_ENV
+          echo "ENV=$ENV" >> $GITHUB_ENV
+
       - name: Build message.json for Teams
         run: |
           BUILD_END=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -108,13 +119,6 @@ jobs:
               ]
             }' > message.json
 
-      - name: Check that message.json exists before upload
-        run: |
-          echo "Checking if message.json was created:"
-          ls -la message.json || echo "message.json NOT FOUND"
-          echo "---"
-          cat message.json || echo "Empty or not created"
-
       - name: Upload message.json for email job
         uses: actions/upload-artifact@v4
         with:
@@ -132,13 +136,6 @@ jobs:
         with:
           name: message-json
           path: .
-
-      - name: Confirm message.json was downloaded
-        run: |
-          echo "Checking if message.json was downloaded:"
-          ls -la message.json || echo "message.json NOT FOUND"
-          echo "---"
-          cat message.json || echo "Empty or not downloaded"
 
       - name: Checkout current repo
         uses: actions/checkout@v4
