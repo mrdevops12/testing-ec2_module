@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
@@ -98,7 +98,7 @@ jobs:
                -d @message.json "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
       - name: Upload message.json for email job
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: message-json
           path: message.json
@@ -109,14 +109,15 @@ jobs:
 
     steps:
       - name: Download message.json
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: message-json
+          path: .  # Fix: Download to root directory instead of subfolder
 
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+      - name: Debug - Verify files and variables
+        run: |
+          ls -la  # Confirm message.json exists
+          echo "BRANCH: $BRANCH"  # Verify variable is set
 
       - name: Build email body
         run: |
@@ -134,7 +135,7 @@ jobs:
             "<tr><td><strong>Environment:</strong></td><td>" + .sections[1].facts[3].value + "</td></tr>" +
             "</table>" +
             "<p><a href=\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Workflow Run</a></p>" +
-            "<p><a href=\"https://github.com/${{ github.repository }}/commits/${BRANCH}\">View Branch Commits</a></p>" +
+            "<p><a href=\"https://github.com/${{ github.repository }}/commits/$BRANCH\">View Branch Commits</a></p>" +
             "</body></html>"
           ' message.json > email_body.html
 
