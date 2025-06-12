@@ -1,0 +1,114 @@
+name: Email Notification Only
+
+on:
+  workflow_call:
+    inputs:
+      DEPLOY_META_JSON:
+        description: 'Base64-encoded JSON with deployment metadata (must include branch, version, product, env, status)'
+        required: true
+        type: string
+
+    # No TEAMS_WEBHOOK_URL secret needed any more
+
+jobs:
+  email-only:
+    runs-on: arc-rs-nonprod  # or ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Capture timestamps
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+          echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+
+      - name: Build & send Email only
+        env:
+          INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
+          BUILD_START:              ${{ env.BUILD_START }}
+          BUILD_END:                ${{ env.BUILD_END }}
+          GITHUB_SHA:               ${{ github.sha }}
+          GITHUB_RUN_NUMBER:        ${{ github.run_number }}
+          GITHUB_REPOSITORY:        ${{ github.repository }}
+          GITHUB_ACTOR:             ${{ github.actor }}
+          EMAIL_TO:                 yourname@yourcompany.com  # replace or use a secret
+        run: |
+          python3 << 'EOF'
+          import os, json, base64, subprocess
+
+          # 1) Decode payload
+          payload = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
+          branch  = payload['branch']
+          version = payload['version']
+          product = payload['product']
+          envname = payload['env']
+          status  = payload['status'].upper()
+
+          # 2) CI context
+          start   = os.environ['BUILD_START']
+          end     = os.environ['BUILD_END']
+          sha     = os.environ['GITHUB_SHA'][:8]
+          msg     = subprocess.check_output(
+                      ['git','log','-1','--pretty=format:%s']
+                    ).decode()
+          run_id  = os.environ['GITHUB_RUN_NUMBER']
+          repo    = os.environ['GITHUB_REPOSITORY']
+          actor   = os.environ['GITHUB_ACTOR']
+
+          # 3) Build separate HTML tables
+          build_rows = "\n".join(
+            f"<tr><td><b>{name}</b></td><td>{value}</td></tr>"
+            for name, value in [
+              ("Status",       f"{status}"),
+              ("Triggered By", actor),
+              ("Start Time",   start),
+              ("End Time",     end),
+              ("Commit",       f"{sha} - {msg}"),
+              ("Workflow Run", f"#{run_id}")
+            ]
+          )
+          release_rows = "\n".join(
+            f"<tr><td><b>{name}</b></td><td>{value}</td></tr>"
+            for name, value in [
+              ("Source Branch",      branch),
+              ("Artifact Version",   version),
+              ("Application Module", product),
+              ("Environment",        envname)
+            ]
+          )
+
+          html = f"""
+          <html>
+            <body>
+              <h2>Build Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {build_rows}
+              </table>
+              <h2>Release Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {release_rows}
+              </table>
+              <p><a href="https://github.com/{repo}/actions/runs/{run_id}">
+                View Workflow Run
+              </a></p>
+              <p><a href="https://github.com/{repo}/commits/{branch}">
+                View Branch Commits
+              </a></p>
+            </body>
+          </html>
+          """
+          with open('email_body.html','w') as f:
+            f.write(html)
+
+          # 4) Fire off the email
+          to_addr = os.environ['EMAIL_TO']
+          subject = f"[{end}] Build #{run_id}: {status}"
+          subprocess.check_call([
+            "python3", ".github/workflows/mail.py",
+            to_addr, subject, "email_body.html"
+          ])
+          EOF
