@@ -1,0 +1,107 @@
+# .github/workflows/teams-notification-only.yml
+name: Teams Notification Only
+
+on:
+  workflow_call:
+    inputs:
+      DEPLOY_META_JSON:
+        description: 'Base64-encoded JSON with deployment metadata (must include branch, version, product, env, status)'
+        required: true
+        type: string
+
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams Incoming Webhook URL'
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest   # or your self-hosted label
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Capture timestamps
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+          echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+
+      - name: Decode & send Teams card
+        env:
+          INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
+          BUILD_START:           ${{ env.BUILD_START }}
+          BUILD_END:             ${{ env.BUILD_END }}
+          GITHUB_SHA:            ${{ github.sha }}
+          GITHUB_RUN_NUMBER:     ${{ github.run_number }}
+          GITHUB_REPOSITORY:     ${{ github.repository }}
+          GITHUB_ACTOR:          ${{ github.actor }}
+          TEAMS_WEBHOOK_URL:     ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          python3 << 'EOF'
+          import os, json, base64, subprocess, requests
+
+          # Decode metadata payload
+          md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
+          branch  = md['branch']
+          version = md['version']
+          product = md['product']
+          envname = md['env']
+          status  = md['status'].upper()
+
+          # Gather CI context
+          start  = os.environ['BUILD_START']
+          end    = os.environ['BUILD_END']
+          sha    = os.environ['GITHUB_SHA'][:8]
+          msg    = subprocess.check_output(['git','log','-1','--pretty=format:%s']).decode()
+          run_id = os.environ['GITHUB_RUN_NUMBER']
+          repo   = os.environ['GITHUB_REPOSITORY']
+          actor  = os.environ['GITHUB_ACTOR']
+
+          # Maps
+          emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
+          color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
+          emoji = emoji_map.get(status, '❓')
+          theme = color_map.get(status, '#808080')
+
+          # Build and post the MessageCard
+          card = {
+            "@type":"MessageCard","@context":"https://schema.org/extensions",
+            "themeColor": theme,
+            "summary": f"Build {status}",
+            "sections":[
+              {"activityTitle":"🔧 **Build Information**","facts":[
+                 {"name":"Status",       "value":f"{emoji} {status}"},
+                 {"name":"Triggered By", "value":actor},
+                 {"name":"Start Time",   "value":start},
+                 {"name":"End Time",     "value":end},
+                 {"name":"Commit",       "value":f"{sha} - {msg}"},
+                 {"name":"Workflow Run", "value":f"#{run_id}"}
+              ],"markdown":True},
+              {"startGroup":True,"text":"───────────────","markdown":True},
+              {"startGroup":True,"activityTitle":"## 🚀 Release Information","facts":[
+                 {"name":"Source Branch",      "value":branch},
+                 {"name":"Artifact Version",   "value":version},
+                 {"name":"Application Module", "value":product},
+                 {"name":"Environment",        "value":envname}
+              ],"markdown":True}
+            ],
+            "potentialAction":[
+              {"@type":"OpenUri","name":"View Workflow Run",
+               "targets":[{"os":"default",
+                           "uri":f"https://github.com/{repo}/actions/runs/{run_id}"}]},
+              {"@type":"OpenUri","name":"View Branch Commits",
+               "targets":[{"os":"default",
+                           "uri":f"https://github.com/{repo}/commits/{branch}"}]}
+            ]
+          }
+
+          requests.post(
+            os.environ['TEAMS_WEBHOOK_URL'],
+            json=card,
+            headers={'Content-Type':'application/json'}
+          ).raise_for_status()
+          EOF
