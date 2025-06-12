@@ -15,7 +15,7 @@ on:
 
 jobs:
   notify-and-email:
-    runs-on: arc-rs-nonprod   # or ubuntu-latest
+    runs-on: arc-rs-nonprod  # or ubuntu-latest
 
     steps:
       - name: Checkout repo
@@ -26,10 +26,10 @@ jobs:
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
           echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
-      - name: Generate & send notifications with Python
+      - name: Setup Python
         uses: actions/setup-python@v4
 
-      - name: Run Python to build & send
+      - name: Build & send Teams + Email
         env:
           INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
           BUILD_START:              ${{ env.BUILD_START }}
@@ -39,12 +39,12 @@ jobs:
           GITHUB_REPOSITORY:        ${{ github.repository }}
           GITHUB_ACTOR:             ${{ github.actor }}
           TEAMS_WEBHOOK_URL:        ${{ secrets.TEAMS_WEBHOOK_URL }}
-          EMAIL_TO:                 yourname@yourcompany.com
+          EMAIL_TO:                 yourname@yourcompany.com  # replace or use a secret
         run: |
           python3 << 'EOF'
           import os, json, base64, subprocess, requests
 
-          # Decode the payload (must contain these keys exactly)
+          # Decode the payload
           payload = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
           branch  = payload['branch']
           version = payload['version']
@@ -52,81 +52,112 @@ jobs:
           envname = payload['env']
           status  = payload['status'].upper()
 
-          # Grab CI context
+          # CI context
           start   = os.environ['BUILD_START']
           end     = os.environ['BUILD_END']
           sha     = os.environ['GITHUB_SHA'][:8]
-          msg     = subprocess.check_output(['git','log','-1','--pretty=format:%s']).decode()
+          msg     = subprocess.check_output(
+                       ['git','log','-1','--pretty=format:%s']
+                     ).decode()
           run_id  = os.environ['GITHUB_RUN_NUMBER']
           repo    = os.environ['GITHUB_REPOSITORY']
           actor   = os.environ['GITHUB_ACTOR']
 
-          # Map status to emojis/colors
+          # Emoji & color maps
           emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
           color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
           emoji = emoji_map.get(status, '❓')
           theme = color_map.get(status, '#808080')
 
-          # Build Teams JSON
+          # Build Teams JSON with section separator & bold release title
           teams_msg = {
             "@type":"MessageCard","@context":"https://schema.org/extensions",
             "themeColor": theme,
             "summary": f"Build {status}",
             "sections": [
-              {"activityTitle":"🔧 Build Information",
-               "facts":[
-                 {"name":"Status",         "value":f"{emoji} {status}"},
-                 {"name":"Triggered By",   "value":actor},
-                 {"name":"Start Time",     "value":start},
-                 {"name":"End Time",       "value":end},
-                 {"name":"Commit",         "value":f"{sha} - {msg}"},
-                 {"name":"Workflow Run",   "value":f"#{run_id}"}
-               ],"markdown":True},
-              {"activityTitle":"🚀 Release Information",
-               "facts":[
-                 {"name":"Source Branch",      "value":branch},
-                 {"name":"Artifact Version",   "value":version},
-                 {"name":"Application Module", "value":product},
-                 {"name":"Environment",        "value":envname}
-               ],"markdown":True}
+              {
+                "activityTitle":"🔧 **Build Information**",
+                "facts":[
+                  {"name":"Status",       "value":f"{emoji} {status}"},
+                  {"name":"Triggered By", "value":actor},
+                  {"name":"Start Time",   "value":start},
+                  {"name":"End Time",     "value":end},
+                  {"name":"Commit",       "value":f"{sha} - {msg}"},
+                  {"name":"Workflow Run", "value":f"#{run_id}"}
+                ],
+                "markdown": True
+              },
+              {
+                "startGroup": True,
+                "activityTitle":"**🚀 Release Information**",
+                "facts":[
+                  {"name":"Source Branch",      "value":branch},
+                  {"name":"Artifact Version",   "value":version},
+                  {"name":"Application Module", "value":product},
+                  {"name":"Environment",        "value":envname}
+                ],
+                "markdown": True
+              }
             ],
             "potentialAction":[
-              {"@type":"OpenUri","name":"View Workflow Run",
-               "targets":[{"os":"default","uri":f"https://github.com/{repo}/actions/runs/{run_id}"}]},
-              {"@type":"OpenUri","name":"View Branch Commits",
-               "targets":[{"os":"default","uri":f"https://github.com/{repo}/commits/{branch}"}]}
+              {
+                "@type":"OpenUri","name":"View Workflow Run",
+                "targets":[{"os":"default",
+                            "uri":f"https://github.com/{repo}/actions/runs/{run_id}"}]
+              },
+              {
+                "@type":"OpenUri","name":"View Branch Commits",
+                "targets":[{"os":"default",
+                            "uri":f"https://github.com/{repo}/commits/{branch}"}]
+              }
             ]
           }
 
-          # POST to Teams
-          resp = requests.post(
+          # Send Teams card
+          requests.post(
             os.environ['TEAMS_WEBHOOK_URL'],
             json=teams_msg,
             headers={'Content-Type':'application/json'}
-          )
-          resp.raise_for_status()
+          ).raise_for_status()
 
-          # Build HTML email
-          rows = ""
-          for section in teams_msg['sections']:
-            for fact in section['facts']:
-              rows += f"<tr><td><b>{fact['name']}</b></td><td>{fact['value']}</td></tr>\n"
+          # Build separate HTML tables
+          build_rows = "\n".join(
+            f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>"
+            for f in teams_msg['sections'][0]['facts']
+          )
+          release_rows = "\n".join(
+            f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>"
+            for f in teams_msg['sections'][1]['facts']
+          )
+
           html = f"""
           <html>
             <body>
-              <h2>Build & Release Notification</h2>
+              <h2>Build Information</h2>
               <table border="1" cellpadding="6" cellspacing="0">
-                {rows}
+                {build_rows}
               </table>
-              <p><a href="https://github.com/{repo}/actions/runs/{run_id}">View Workflow Run</a></p>
-              <p><a href="https://github.com/{repo}/commits/{branch}">View Branch Commits</a></p>
+              <h2>Release Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {release_rows}
+              </table>
+              <p>
+                <a href="https://github.com/{repo}/actions/runs/{run_id}">
+                  View Workflow Run
+                </a>
+              </p>
+              <p>
+                <a href="https://github.com/{repo}/commits/{branch}">
+                  View Branch Commits
+                </a>
+              </p>
             </body>
           </html>
           """
           with open('email_body.html','w') as f:
             f.write(html)
 
-          # Send email
+          # Send HTML email
           to_addr = os.environ['EMAIL_TO']
           subject = f"[{end}] Build #{run_id}: {status}"
           subprocess.check_call([
