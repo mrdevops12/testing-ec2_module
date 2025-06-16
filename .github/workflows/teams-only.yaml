@@ -1,3 +1,4 @@
+# .github/workflows/teams-notification-only.yml
 name: Teams Notification Only
 
 on:
@@ -18,14 +19,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Capture timestamps
         run: |
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
           echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
-      - uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
 
       - name: Decode & send Teams card
         env:
@@ -33,35 +36,52 @@ jobs:
           TEAMS_WEBHOOK_URL:     ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: |
           python3 << 'EOF'
-          import os, json, base64, requests
+          import os, json, base64, subprocess, requests
 
-          # 1) Decode the payload
+          # Decode the base64 payload
           md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
 
-          # 2) Build facts dynamically
-          facts = []
-          for k, v in md.items():
-              name = k.replace('_',' ').title()
-              val  = str(v).upper() if k.lower()=='status' else str(v)
-              facts.append({'name': name, 'value': val})
+          # Standard CI context facts
+          start   = os.environ['BUILD_START']
+          end     = os.environ['BUILD_END']
+          sha     = os.environ['GITHUB_SHA'][:8]
+          msg     = subprocess.check_output(['git','log','-1','--pretty=format:%s']).decode()
+          run_id  = os.environ['GITHUB_RUN_NUMBER']
+          actor   = os.environ['GITHUB_ACTOR']
+          status  = md.get('status','').upper()
 
-          # 3) Map status to emoji & color
-          status = md.get('status','').upper()
           emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
           color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
           emoji = emoji_map.get(status, 'ℹ️')
           theme = color_map.get(status, '#808080')
 
-          # 4) Build and post the Teams MessageCard
+          build_facts = [
+            {'name':'Status',       'value':f"{emoji} {status}"},
+            {'name':'Triggered By', 'value':actor},
+            {'name':'Start Time',   'value':start},
+            {'name':'End Time',     'value':end},
+            {'name':'Commit',       'value':f"{sha} - {msg}"},
+            {'name':'Workflow Run', 'value':f"#{run_id}"}
+          ]
+
+          # Dynamic Release Information: iterate any keys except 'status'
+          release_facts = []
+          for key, value in md.items():
+            if key.lower() == 'status':
+              continue
+            name = key.replace('_',' ').title()
+            release_facts.append({'name': name, 'value': str(value)})
+
+          # Assemble and send the MessageCard
           card = {
-            "@type":"MessageCard",
-            "@context":"https://schema.org/extensions",
-            "themeColor": theme,
-            "summary": f"Build {status or 'Notification'}",
-            "sections":[
-              {"activityTitle":"📝 Deployment Information",
-               "facts": facts,
-               "markdown": True}
+            '@type':       'MessageCard',
+            '@context':    'https://schema.org/extensions',
+            'themeColor':  theme,
+            'summary':     f"Build {status}",
+            'sections': [
+              {'activityTitle':'🔧 Build Information',   'facts': build_facts,   'markdown': True},
+              {'startGroup': True,                       'text': '───────────────', 'markdown': True},
+              {'startGroup': True, 'activityTitle':'🚀 Release Information', 'facts': release_facts, 'markdown': True}
             ]
           }
 
