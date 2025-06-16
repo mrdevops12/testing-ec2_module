@@ -1,22 +1,52 @@
+# .github/workflows/test-notification.yaml
+name: Project A Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENV:
+        description: 'Environment'
+        required: true
+        type: string
+      BRANCH:
+        description: 'Branch'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run build/tests
+        run: |
+          echo "Building..."
+          # ← insert your real build commands here
+          # e.g. exit 1   # to simulate a failure for testing
+
   prepare-json:
     needs: build
+    if: always()                # ensure we notify even on build failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Determine version
         id: get-version
         run: |
           if [ -f package.json ]; then
-            # manifest-based
+            # Use version from package.json
             VERSION=$(jq -r .version package.json)
           elif git describe --tags --abbrev=0 >/dev/null 2>&1; then
-            # tag-based
+            # Fallback: use latest Git tag
             VERSION=$(git describe --tags --abbrev=0)
           else
-            # fallback to SHA
+            # Last fallback: use short SHA
             VERSION=${GITHUB_SHA::8}
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -31,6 +61,21 @@
             --arg env     "${{ inputs.ENV }}" \
             --arg status  "${{ needs.build.result }}" \
             --arg build   "${{ github.run_number }}" \
-            '{ product: $product, branch: $branch, version: $version, env: $env, status: $status, build: $build }'
+            '{
+              product: $product,
+              branch: $branch,
+              version: $version,
+              env: $env,
+              status: $status,
+              build: $build
+            }'
           )
-          echo "DEPLOY_META_JSON=$( echo "$JSON" | base64 -w0 )" >> $GITHUB_OUTPUT
+          # Base64-encode the JSON on one line:
+          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
+  notify:
+    needs: prepare-json
+    uses: your-org/your-repo/.github/workflows/teams-notification-only.yml@main
+    with:
+      DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.DEVSECOPS_TEAMS_HOOK }}
