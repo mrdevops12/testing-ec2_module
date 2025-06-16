@@ -1,0 +1,11 @@
+curl -o kubectl https://s3.us-east-1.amazonaws.com/amazon-eks/1.30.0/2024-05-17/bin/linux/amd64/kubectl
+chmod +x ./kubectl
+mv ./kubectl /usr/local/bin/
+
+
+curl -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.30.0/2024-05-17/bin/linux/amd64/aws-iam-authenticator
+chmod +x ./aws-iam-authenticator
+mv aws-iam-authenticator /usr/local/bin/
+
+
+aws eks update-kubeconfig --name <clsuter-name> --region us-east-1
