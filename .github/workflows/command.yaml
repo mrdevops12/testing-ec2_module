@@ -20,4 +20,16 @@ sed -i 's/client.authentication.k8s.io\/v1alpha1/client.authentication.k8s.io\/v
 cat ~/.kube/config | grep client.authentication.k8s
 
 
+# Remove AWS CLI v1
+sudo yum remove -y awscli
+
+# Download and install AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# Verify version
+aws --version
+
+
 
