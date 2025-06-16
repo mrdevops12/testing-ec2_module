@@ -36,3 +36,54 @@ aws --version
 
 
 
+
+
+
+
+
+
+
+1. Cluster Core Settings
+
+The cluster is named devops-eks-al2023 and is running Kubernetes v1.30 (eks.34).
+
+The API endpoint is configured as private-only; public access is disabled.
+
+AWS reports five deprecation warnings under “Upgrade insights,” and standard support for v1.30 ends on July 23, 2025.
+
+2. Networking and Security Groups
+
+The cluster resides in VPC vpc-0e1606caa6e9b9aab, spread across three private subnets.
+
+Terraform has added ingress rules on the control-plane security group to allow TCP/443 from your corporate VPN (10.0.0.0/8) and any secondary CIDRs provided.
+
+Worker nodes and the jump-host share that control-plane SG, which by design permits inbound port 443 from itself. No additional security-group rules are needed for API access.
+
+3. Compute Resources
+
+Karpenter Controller is deployed as an EKS-managed node group of m5.large instances (min 2/max 5).
+
+Linux GitHub Runners are defined via a Karpenter NodeClass/NodePool and are correctly mapped in the aws-auth ConfigMap.
+
+Windows GitHub Runners are also present but their IAM role is not yet mapped in aws-auth, so those nodes cannot join until we add that mapping.
+
+4. IAM Roles & IRSA
+
+IRSA is enabled for the Karpenter controller and the EBS CSI driver (you can see the ServiceAccount→IAM Role associations in the console).
+
+Other add-ons (CoreDNS, kube-proxy, VPC CNI, Pod Identity Agent, CloudWatch Observability) are installed but are not using IRSA.
+
+Your SSO AdministratorAccess role is correctly mapped as system:masters in aws-auth.
+
+5. Add-ons and Observability
+
+You’ve deployed CoreDNS, kube-proxy, the VPC CNI (with custom networking and Windows IPAM), the Pod Identity Agent, and CloudWatch Observability using the AWS-Ia blueprints module.
+
+All add-ons are at the versions specified in Terraform (e.g., CNI v1.19.0-eksbuild.1); the console shows upgrade buttons for several of them.
+
+Control-plane logging has API Server and Authenticator enabled; Scheduler and Controller Manager logs remain off.
+
+No Prometheus workspace or scraper is configured, and Container Insights/APM is not enabled in CloudWatch.
+
+
+
