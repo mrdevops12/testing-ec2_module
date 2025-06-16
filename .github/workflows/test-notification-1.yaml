@@ -11,44 +11,40 @@ on:
         description: 'Branch'
         required: true
         type: string
-      VERSION:
-        description: 'Version'
-        required: true
-        type: string
 
 jobs:
-  # ────────────────────────────────
-  # 1) Build job: do your compile/tests/etc.
-  # ────────────────────────────────
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Run build/tests
         run: |
-          # your build commands here
           echo "Building..."
-
-  # ────────────────────────────────
-  # 2) Prepare JSON (includes dynamic status)
-  # ────────────────────────────────
+          # insert your real build commands here
   prepare-json:
     needs: build
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
     steps:
-      - name: Encode Project A JSON
+      - uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: get-version
+        run: |
+          VERSION=$(jq -r .version package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Encode metadata JSON
         id: encode
         run: |
           JSON=$(jq -n \
             --arg product "Pathway" \
-            --arg branch "${{ inputs.BRANCH }}" \
-            --arg version "${{ inputs.VERSION }}" \
-            --arg env "${{ inputs.ENV }}" \
-            --arg status "${{ needs.build.result }}" \
-            --arg build "${{ github.run_number }}" \
+            --arg branch  "${{ inputs.BRANCH }}" \
+            --arg version "$VERSION" \
+            --arg env     "${{ inputs.ENV }}" \
+            --arg status  "${{ needs.build.result }}" \
+            --arg build   "${{ github.run_number }}" \
             '{
               product: $product,
               branch: $branch,
@@ -56,13 +52,10 @@ jobs:
               env: $env,
               status: $status,
               build: $build
-            }')
-          ENCODED=$(echo "$JSON" | base64 -w 0)
-          echo "DEPLOY_META_JSON=$ENCODED" >> $GITHUB_OUTPUT
+            }'
+          )
+          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
 
-  # ────────────────────────────────
-  # 3) Notify via Teams (reusable workflow)
-  # ────────────────────────────────
   notify:
     needs: prepare-json
     uses: your-org/your-repo/.github/workflows/teams-notification-only.yml@main
