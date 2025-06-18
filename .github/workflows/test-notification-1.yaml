@@ -24,11 +24,11 @@ jobs:
       - name: Run build/tests
         run: |
           echo "Building..."
-          # ← your real build steps here
+          # ← your real build commands here
 
   prepare-json:
     needs: build
-    if: always()    # always send notification, even on failure
+    if: always()   # notify on both success & failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
@@ -39,10 +39,13 @@ jobs:
         id: get-version
         run: |
           if [ -f package.json ]; then
+            # version from package.json
             VERSION=$(jq -r .version package.json)
           elif git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            # fallback to latest tag
             VERSION=$(git describe --tags --abbrev=0)
           else
+            # fallback to short SHA
             VERSION=${GITHUB_SHA::8}
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -70,10 +73,15 @@ jobs:
 
   notify:
     needs: prepare-json
-    uses: ./.github/workflows/teams-notification-source.yml@main
+    uses: ./.github/workflows/teams-email-notification-source.yml@main
+
+    # these flow into the reusable workflow's `inputs:` block
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+      RECIPIENTS:        ${{ inputs.RECIPIENTS }}
+      SOURCE_REPO:       ${{ github.repository }}
+      SOURCE_RUN_ID:     ${{ github.run_id }}
+
+    # secrets must go under `secrets:`, not `with:`
+    secrets:
       TEAMS_WEBHOOK_URL: ${{ secrets.DEVSECOPS_TEAMS_HOOK }}
-      EMAIL_TO:         ${{ inputs.RECIPIENTS }}
-      SOURCE_REPO:      ${{ github.repository }}
-      SOURCE_RUN_ID:    ${{ github.run_id }}
