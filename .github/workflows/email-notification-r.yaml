@@ -1,3 +1,4 @@
+# .github/workflows/test-notifications.yaml
 name: Project A Notification
 
 on:
@@ -11,10 +12,7 @@ on:
         description: 'Branch'
         required: true
         type: string
-      RECIPIENTS:
-        description: 'Comma-separated list of email addresses'
-        required: true
-        type: string
+    # ── removed RECIPIENTS input ──
 
 jobs:
   build:
@@ -73,6 +71,9 @@ jobs:
     uses: ./.github/workflows/email-notification-source.yml@main
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
-      RECIPIENTS:        ${{ inputs.RECIPIENTS }}
+      # ← hard-coded recipients here, comma-separated
+      RECIPIENTS:        "alice@yourcompany.com,bob@yourcompany.com"
       SOURCE_REPO:       ${{ github.repository }}
       SOURCE_RUN_ID:     ${{ github.run_id }}
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.DEVSECOPS_TEAMS_HOOK }}
