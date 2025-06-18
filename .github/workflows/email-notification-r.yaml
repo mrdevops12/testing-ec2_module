@@ -1,0 +1,81 @@
+# .github/workflows/test-notification.yml
+name: Project A Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENV:
+        description: 'Environment'
+        required: true
+        type: string
+      BRANCH:
+        description: 'Branch'
+        required: true
+        type: string
+      RECIPIENTS:
+        description: |
+          Comma-separated email addresses to notify.
+          e.g. alice@corp.com,bob@corp.com
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run build/tests
+        run: |
+          echo "Building..."
+          # your real build commands go here
+
+  prepare-json:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: get-version
+        run: |
+          if [ -f package.json ]; then
+            VERSION=$(jq -r .version package.json)
+          elif git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            VERSION=$(git describe --tags --abbrev=0)
+          else
+            VERSION=${GITHUB_SHA::8}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Encode metadata JSON
+        id: encode
+        run: |
+          JSON=$(jq -n \
+            --arg product "Pathway" \
+            --arg branch  "${{ inputs.BRANCH }}" \
+            --arg version "$VERSION" \
+            --arg env     "${{ inputs.ENV }}" \
+            --arg status  "${{ needs.build.result }}" \
+            --arg build   "${{ github.run_number }}" \
+            '{
+              product: $product,
+              branch: $branch,
+              version: $version,
+              env: $env,
+              status: $status,
+              build: $build
+            }'
+          )
+          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
+
+  notify:
+    needs: prepare-json
+    uses: your-org/your-repo/.github/workflows/email-only.yml@main
+    with:
+      DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+      RECIPIENTS:       ${{ inputs.RECIPIENTS }}
+    secrets:
+      # your mail.py config uses its own SMTP creds, no extra secrets here
