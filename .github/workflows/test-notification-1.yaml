@@ -1,4 +1,3 @@
-# .github/workflows/test-notifications.yml
 name: Project A Notification
 
 on:
@@ -25,17 +24,15 @@ jobs:
       - name: Run build/tests
         run: |
           echo "Building..."
-          # ← your real build steps here
-
+  
   prepare-json:
     needs: build
-    if: always()   # always notify, even on failure
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Determine version
         id: get-version
         run: |
@@ -47,7 +44,6 @@ jobs:
             VERSION=${GITHUB_SHA::8}
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-
       - name: Encode metadata JSON
         id: encode
         run: |
@@ -65,15 +61,15 @@ jobs:
               env:     $env,
               status:  $status,
               build:   $build
-            }'
-          )
+            }')
           echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
 
   notify:
     needs: prepare-json
-    uses: ./.github/workflows/teams-email-notification-source.yml     # ← local path, no @ref
+    uses: ./.github/workflows/teams-email-notification-source.yml
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+      # map your dispatch-time RECIPIENTS into the reusable input EMAIL_TO
       EMAIL_TO:        ${{ inputs.RECIPIENTS }}
       SOURCE_REPO:     ${{ github.repository }}
       SOURCE_RUN_ID:   ${{ github.run_id }}
