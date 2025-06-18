@@ -1,17 +1,18 @@
-# .github/workflows/test-notification.yaml
 name: Project A Notification
 
 on:
   workflow_dispatch:
     inputs:
       ENV:
+        description: 'Environment'
         required: true
         type: string
       BRANCH:
+        description: 'Branch'
         required: true
         type: string
       RECIPIENTS:
-        description: 'Comma-separated email addresses'
+        description: 'Comma-separated list of email addresses'
         required: true
         type: string
 
@@ -20,11 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Building…"    # ← your real build commands
+      - name: Run build/tests
+        run: |
+          echo "Building..."
+          # ← your real build steps here
 
   prepare-json:
     needs: build
-    if: always()
+    if: always()   # notify on success AND failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
@@ -55,21 +59,18 @@ jobs:
             --arg build   "${{ github.run_number }}" \
             '{
               product: $product,
-              branch: $branch,
+              branch:  $branch,
               version: $version,
-              env: $env,
-              status: $status,
-              build: $build
+              env:     $env,
+              status:  $status,
+              build:   $build
             }'
           )
           echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
 
   notify:
     needs: prepare-json
-    uses: ./.github/workflows/email-only.yml@main
+    uses: ./.github/workflows/email-notification-source.yml@main
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
       RECIPIENTS:        ${{ inputs.RECIPIENTS }}
-      # ← pass these so your reusable step can link back:
-      SOURCE_REPO:       ${{ github.repository }}
-      SOURCE_RUN_ID:     ${{ github.run_id }}
