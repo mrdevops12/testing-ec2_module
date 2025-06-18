@@ -1,10 +1,11 @@
+
 name: Teams + Email Notification Workflow
 
 on:
   workflow_call:
     inputs:
       DEPLOY_META_JSON:
-        description: 'Base64‐encoded JSON with deployment metadata (any keys)'
+        description: 'Base64-encoded JSON with deployment metadata (any keys)'
         required: true
         type: string
       EMAIL_TO:
@@ -31,24 +32,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Capture timestamps
         run: |
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
           echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
       - uses: actions/setup-python@v4
 
       - name: Validate required inputs
         run: |
           if [ -z "${{ inputs.EMAIL_TO }}" ]; then
             echo "❌ Missing required input: EMAIL_TO" >&2
-            exit 1
-          fi
-          if [ -z "${{ inputs.SOURCE_REPO }}" ]; then
-            echo "❌ Missing required input: SOURCE_REPO" >&2
-            exit 1
-          fi
-          if [ -z "${{ inputs.SOURCE_RUN_ID }}" ]; then
-            echo "❌ Missing required input: SOURCE_RUN_ID" >&2
             exit 1
           fi
 
@@ -67,7 +62,7 @@ jobs:
           python3 << 'EOF'
           import os, json, base64, subprocess, requests
 
-          # decode
+          # Decode metadata
           md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
 
           # CI context
@@ -83,13 +78,13 @@ jobs:
           repo     = os.environ['SOURCE_REPO']
           run_id   = os.environ['SOURCE_RUN_ID']
 
-          # maps
+          # Emojis & colors
           emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
           color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
-          emoji     = emoji_map.get(status,'ℹ️')
-          theme     = color_map.get(status,'#808080')
+          emoji = emoji_map.get(status,'ℹ️')
+          theme = color_map.get(status,'#808080')
 
-          # build facts
+          # Build facts
           build_facts = [
             {'name':'Status',       'value':f"{emoji} {status}"},
             {'name':'Build Number', 'value':f"#{build_no}"},
@@ -100,16 +95,16 @@ jobs:
             {'name':'Workflow Run', 'value':f"#{run_id}"}
           ]
 
-          # release facts
+          # Release facts (everything left in the payload)
           release_facts = [
             {'name': k.replace('_',' ').title(), 'value': str(v)}
             for k, v in md.items()
           ]
 
-          # send to Teams
+          # 1) Post to Teams
           card = {
             "@type":"MessageCard","@context":"https://schema.org/extensions",
-            "themeColor": theme, "summary": f"Build {status}",
+            "themeColor":theme,"summary":f"Build {status}",
             "sections":[
               {"activityTitle":"🔧 Build Information","facts":build_facts,"markdown":True},
               {"startGroup":True,"text":"───────────────","markdown":True},
@@ -122,32 +117,30 @@ jobs:
             headers={'Content-Type':'application/json'}
           ).raise_for_status()
 
-          # render HTML
+          # 2) Generate HTML email
           rows1 = "\n".join(f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>" for f in build_facts)
           rows2 = "\n".join(f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>" for f in release_facts)
-
           html = f"""
-          <html>
-            <body>
-              <h2>Build Information</h2>
-              <table border="1" cellpadding="6" cellspacing="0">
-                {rows1}
-              </table>
-              <h2>Release Information</h2>
-              <table border="1" cellpadding="6" cellspacing="0">
-                {rows2}
-              </table>
-              <p><a href="https://github.com/{repo}/actions/runs/{run_id}">View Workflow Run</a></p>
-            </body>
-          </html>
+          <html><body>
+            <h2>Build Information</h2>
+            <table border="1" cellpadding="6">{rows1}</table>
+            <h2>Release Information</h2>
+            <table border="1" cellpadding="6">{rows2}</table>
+            <p>
+              <a href="https://github.com/{repo}/actions/runs/{run_id}">
+                View Workflow Run
+              </a>
+            </p>
+          </body></html>
           """
           with open('email_body.html','w') as f:
             f.write(html)
 
-          # email it
+          # 3) Send HTML email to each address
           for addr in os.environ['EMAIL_TO'].split(','):
             addr = addr.strip()
-            if not addr: continue
+            if not addr: 
+              continue
             subprocess.check_call([
               "python3", ".github/workflows/mail.py",
               addr,
