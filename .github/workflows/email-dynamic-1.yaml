@@ -1,5 +1,5 @@
-# .github/workflows/teams-email-notification-source.yml
-name: Teams + Email Notification Workflow
+# .github/workflows/email-notification-source.yml
+name: Email Notification Only
 
 on:
   workflow_call:
@@ -8,27 +8,22 @@ on:
         description: 'Base64‐encoded JSON with deployment metadata (any keys)'
         required: true
         type: string
-      EMAIL_TO:
-        description: 'Email address (or comma-separated list) to send the HTML email to'
+      RECIPIENTS:
+        description: 'Comma‐separated list of email addresses'
         required: true
         type: string
       SOURCE_REPO:
-        description: 'Caller repo (owner/name) for the “View Workflow Run” link'
+        description: 'The caller repository (owner/name) for the “View Workflow Run” link'
         required: true
         type: string
       SOURCE_RUN_ID:
-        description: 'Caller workflow run_id for the link'
+        description: 'The caller run_id for the “View Workflow Run” link'
         required: true
         type: string
 
-    secrets:
-      TEAMS_WEBHOOK_URL:
-        description: 'Teams Incoming Webhook URL'
-        required: true
-
 jobs:
-  notify-and-email:
-    runs-on: ubuntu-latest
+  email-only:
+    runs-on: arc-rs-nonprod   # or ubuntu-latest
 
     steps:
       - name: Checkout repo
@@ -39,29 +34,22 @@ jobs:
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
           echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
+      - name: Validate RECIPIENTS input
+        run: |
+          recipients="${{ inputs.RECIPIENTS }}"
+          stripped="${recipients//[ ,]/}"
+          if [[ -z "$stripped" ]]; then
+            echo "❌ RECIPIENTS must contain at least one email address" >&2
+            exit 1
+          fi
+
       - name: Setup Python
         uses: actions/setup-python@v4
 
-      - name: Validate required inputs
-        run: |
-          if [ -z "${{ inputs.EMAIL_TO }}" ]; then
-            echo "❌ Missing required input: EMAIL_TO" >&2
-            exit 1
-          fi
-          if [ -z "${{ inputs.SOURCE_REPO }}" ]; then
-            echo "❌ Missing required input: SOURCE_REPO" >&2
-            exit 1
-          fi
-          if [ -z "${{ inputs.SOURCE_RUN_ID }}" ]; then
-            echo "❌ Missing required input: SOURCE_RUN_ID" >&2
-            exit 1
-          fi
-
-      - name: Build & send Teams + Email
+      - name: Build & send Email only
         env:
           INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
-          TEAMS_WEBHOOK_URL:     ${{ secrets.TEAMS_WEBHOOK_URL }}
-          EMAIL_TO:              ${{ inputs.EMAIL_TO }}
+          RECIPIENTS:            ${{ inputs.RECIPIENTS }}
           SOURCE_REPO:           ${{ inputs.SOURCE_REPO }}
           SOURCE_RUN_ID:         ${{ inputs.SOURCE_RUN_ID }}
           BUILD_START:           ${{ env.BUILD_START }}
@@ -70,14 +58,14 @@ jobs:
           GITHUB_ACTOR:          ${{ github.actor }}
         run: |
           python3 << 'EOF'
-          import os, json, base64, subprocess, requests
+          import os, json, base64, subprocess
 
-          # 1) Decode metadata
+          # Decode arbitrary metadata payload
           md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
 
-          # 2) Pull out CI context
-          status   = md.pop('status','').upper()
-          build_no = md.pop('build','')
+          # Extract CI context
+          status   = md.pop('status', '').upper()
+          build_no = md.pop('build', '')
           start    = os.environ['BUILD_START']
           end      = os.environ['BUILD_END']
           sha      = os.environ['GITHUB_SHA'][:8]
@@ -88,62 +76,51 @@ jobs:
           repo     = os.environ['SOURCE_REPO']
           run_id   = os.environ['SOURCE_RUN_ID']
 
-          # 3) Emoji & theme
-          emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
-          color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
-          emoji = emoji_map.get(status,'ℹ️')
-          theme = color_map.get(status,'#808080')
+          # Build table rows for CI context
+          build_rows = "\n".join([
+            f"<tr><td><b>Status</b></td><td>{status}</td></tr>",
+            f"<tr><td><b>Build Number</b></td><td>#{build_no}</td></tr>",
+            f"<tr><td><b>Triggered By</b></td><td>{actor}</td></tr>",
+            f"<tr><td><b>Start Time</b></td><td>{start}</td></tr>",
+            f"<tr><td><b>End Time</b></td><td>{end}</td></tr>",
+            f"<tr><td><b>Commit</b></td><td>{sha} - {msg}</td></tr>",
+            f"<tr><td><b>Workflow Run</b></td><td>#{run_id}</td></tr>"
+          ])
 
-          # 4) Build and release facts
-          build_facts = [
-            {'name':'Status',       'value':f"{emoji} {status}"},
-            {'name':'Build Number', 'value':f"#{build_no}"},
-            {'name':'Triggered By', 'value':actor},
-            {'name':'Start Time',   'value':start},
-            {'name':'End Time',     'value':end},
-            {'name':'Commit',       'value':f"{sha} - {msg}"},
-            {'name':'Workflow Run', 'value':f"#{run_id}"}
-          ]
-          release_facts = [
-            {'name': k.replace('_',' ').title(), 'value': str(v)}
+          # Release context (everything else in md)
+          release_rows = "\n".join(
+            f"<tr><td><b>{k.replace('_',' ').title()}</b></td><td>{v}</td></tr>"
             for k, v in md.items()
-          ]
+          )
 
-          # 5) Send Teams card
-          card = {
-            "@type":"MessageCard","@context":"https://schema.org/extensions",
-            "themeColor": theme,
-            "summary": f"Build {status}",
-            "sections": [
-              {"activityTitle":"🔧 Build Information",   "facts": build_facts,   "markdown": True},
-              {"startGroup":True,                       "text":"───────────────", "markdown": True},
-              {"startGroup":True,"activityTitle":"🚀 Release Information","facts": release_facts,"markdown":True}
-            ]
-          }
-          requests.post(
-            os.environ['TEAMS_WEBHOOK_URL'],
-            json=card,
-            headers={'Content-Type':'application/json'}
-          ).raise_for_status()
-
-          # 6) Render HTML tables
-          rows1 = "\n".join(f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>" for f in build_facts)
-          rows2 = "\n".join(f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>" for f in release_facts)
+          # Compose HTML
           html = f"""
-          <html><body>
-            <h2>Build Information</h2>
-            <table border="1" cellpadding="6">{rows1}</table>
-            <h2>Release Information</h2>
-            <table border="1" cellpadding="6">{rows2}</table>
-            <p><a href="https://github.com/{repo}/actions/runs/{run_id}">View Workflow Run</a></p>
-          </body></html>
+          <html>
+            <body>
+              <h2>Build Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {build_rows}
+              </table>
+              <h2>Release Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {release_rows}
+              </table>
+              <p>
+                <a href="https://github.com/{repo}/actions/runs/{run_id}">
+                  View Workflow Run
+                </a>
+              </p>
+            </body>
+          </html>
           """
-          with open('email_body.html','w') as f: f.write(html)
+          with open('email_body.html','w') as f:
+            f.write(html)
 
-          # 7) Email HTML to each address
-          for addr in os.environ['EMAIL_TO'].split(','):
+          # Send one email per comma‐separated address
+          for addr in os.environ['RECIPIENTS'].split(','):
             addr = addr.strip()
-            if not addr: continue
+            if not addr:
+              continue
             subprocess.check_call([
               "python3", ".github/workflows/mail.py",
               addr,
