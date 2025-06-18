@@ -1,4 +1,4 @@
-# .github/workflows/test-notification.yml
+# .github/workflows/test-notification.yaml
 name: Project A Notification
 
 on:
@@ -13,9 +13,7 @@ on:
         required: true
         type: string
       RECIPIENTS:
-        description: |
-          Comma-separated email addresses to notify.
-          e.g. alice@corp.com,bob@corp.com
+        description: 'Comma-separated list of email addresses'
         required: true
         type: string
 
@@ -27,11 +25,11 @@ jobs:
       - name: Run build/tests
         run: |
           echo "Building..."
-          # your real build commands go here
+          # → your build commands here
 
   prepare-json:
     needs: build
-    if: always()
+    if: always()   # notify on success _and_ failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
@@ -69,13 +67,11 @@ jobs:
               build: $build
             }'
           )
-          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
+          echo "DEPLOY_META_JSON=$( echo "$JSON" | base64 -w0 )" >> $GITHUB_OUTPUT
 
   notify:
     needs: prepare-json
-    uses: your-org/your-repo/.github/workflows/email-only.yml@main
+    uses: ./.github/workflows/email-only.yml@main
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
-      RECIPIENTS:       ${{ inputs.RECIPIENTS }}
-    secrets:
-      # your mail.py config uses its own SMTP creds, no extra secrets here
+      RECIPIENTS:        ${{ inputs.RECIPIENTS }}
