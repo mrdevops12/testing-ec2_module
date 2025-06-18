@@ -1,4 +1,3 @@
-# .github/workflows/test-notification.yaml
 name: Project A Notification
 
 on:
@@ -25,11 +24,11 @@ jobs:
       - name: Run build/tests
         run: |
           echo "Building..."
-          # → your build commands here
+          # ← your real build commands go here
 
   prepare-json:
     needs: build
-    if: always()   # notify on success _and_ failure
+    if: always()   # fire even on failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
@@ -60,18 +59,17 @@ jobs:
             --arg build   "${{ github.run_number }}" \
             '{
               product: $product,
-              branch: $branch,
+              branch:  $branch,
               version: $version,
-              env: $env,
-              status: $status,
-              build: $build
-            }'
-          )
-          echo "DEPLOY_META_JSON=$( echo "$JSON" | base64 -w0 )" >> $GITHUB_OUTPUT
+              env:     $env,
+              status:  $status,
+              build:   $build
+            }')
+          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
 
   notify:
     needs: prepare-json
-    uses: ./.github/workflows/email-only.yml@main
+    uses: ./.github/workflows/email-only.yml
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
       RECIPIENTS:        ${{ inputs.RECIPIENTS }}
