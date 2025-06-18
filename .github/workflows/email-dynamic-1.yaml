@@ -1,4 +1,3 @@
-
 name: Email Notification Only
 
 on:
@@ -26,26 +25,13 @@ jobs:
           echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
           echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
 
-      - name: Validate metadata JSON has required keys
-        shell: bash
-        run: |
-          echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > payload.json
-          missing=()
-          for key in branch version product env status build; do
-            if ! jq -e --arg k "$key" 'has($k)' payload.json >/dev/null; then
-              missing+=("$key")
-            fi
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "❌ Missing required metadata fields: ${missing[*]}" >&2
-            exit 1
-          fi
-
       - name: Validate RECIPIENTS input
-        shell: bash
         run: |
-          # strip commas and whitespace, must leave at least one character
-          if [[ -z "${{ inputs.RECIPIENTS//[ ,]/}}" ]]; then
+          # bring the GitHub input into a shell var
+          recipients="${{ inputs.RECIPIENTS }}"
+          # strip commas and spaces, must leave at least one character
+          stripped="${recipients//[ ,]/}"
+          if [[ -z "$stripped" ]]; then
             echo "❌ RECIPIENTS must contain at least one valid email address" >&2
             exit 1
           fi
@@ -67,10 +53,10 @@ jobs:
           python3 << 'EOF'
           import os, json, base64, subprocess
 
-          # Decode whatever the caller sent
+          #  Decode the caller’s payload
           md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
 
-          # --- CI context (static) ---
+          #  Pull out the CI context
           status   = md.pop('status','').upper()
           build_no = md.pop('build','')
           start    = os.environ['BUILD_START']
@@ -82,7 +68,7 @@ jobs:
           run_id   = os.environ['GITHUB_RUN_NUMBER']
           actor    = os.environ['GITHUB_ACTOR']
 
-          # Build table rows for CI context
+          #  Build the “Build Information” rows
           build_rows = "\n".join([
             f"<tr><td><b>Status</b></td><td>{status}</td></tr>",
             f"<tr><td><b>Build Number</b></td><td>#{build_no}</td></tr>",
@@ -93,13 +79,13 @@ jobs:
             f"<tr><td><b>Workflow Run</b></td><td>#{run_id}</td></tr>"
           ])
 
-          # --- Release context (fully dynamic) ---
+          #  Build the “Release Information” rows (everything left in md)
           release_rows = "\n".join(
             f"<tr><td><b>{k.replace('_',' ').title()}</b></td><td>{v}</td></tr>"
             for k, v in md.items()
           )
 
-          # --- Compose HTML ---
+          #  Compose the HTML
           html = f"""
           <html>
             <body>
@@ -122,7 +108,7 @@ jobs:
           with open('email_body.html','w') as f:
             f.write(html)
 
-          # Send one email per comma‐separated address
+          #  Send one email per comma‐separated address
           for addr in os.environ['RECIPIENTS'].split(','):
             addr = addr.strip()
             if not addr:
