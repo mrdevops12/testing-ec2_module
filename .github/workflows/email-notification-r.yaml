@@ -1,136 +1,75 @@
-# .github/workflows/email-only.yml
-name: Email Notification Only
+# .github/workflows/test-notification.yaml
+name: Project A Notification
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      DEPLOY_META_JSON:
-        description: 'Base64‐encoded JSON with deployment metadata (any keys)'
+      ENV:
+        required: true
+        type: string
+      BRANCH:
         required: true
         type: string
       RECIPIENTS:
-        description: 'Comma‐separated list of email addresses'
+        description: 'Comma-separated email addresses'
         required: true
         type: string
 
 jobs:
-  email-only:
-    runs-on: arc-rs-nonprod   # or ubuntu-latest
-
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - run: echo "Building…"    # ← your real build commands
 
-      - name: Capture timestamps
-        run: |
-          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
-          echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+  prepare-json:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Validate metadata JSON has required keys
-        shell: bash
+      - name: Determine version
+        id: get-version
         run: |
-          echo "${{ inputs.DEPLOY_META_JSON }}" | base64 -d > payload.json
-          missing=()
-          for key in branch version product env status build; do
-            if ! jq -e --arg k "$key" 'has($k)' payload.json >/dev/null; then
-              missing+=("$key")
-            fi
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "❌ Missing required metadata fields: ${missing[*]}" >&2
-            exit 1
+          if [ -f package.json ]; then
+            VERSION=$(jq -r .version package.json)
+          elif git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            VERSION=$(git describe --tags --abbrev=0)
+          else
+            VERSION=${GITHUB_SHA::8}
           fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Validate RECIPIENTS input
-        shell: bash
+      - name: Encode metadata JSON
+        id: encode
         run: |
-          # strip commas and whitespace, must leave at least one character
-          if [[ -z "${{ inputs.RECIPIENTS//[ ,]/}}" ]]; then
-            echo "❌ RECIPIENTS must contain at least one valid email address" >&2
-            exit 1
-          fi
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-
-      - name: Build & send Email only
-        env:
-          INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
-          RECIPIENTS:            ${{ inputs.RECIPIENTS }}
-          BUILD_START:           ${{ env.BUILD_START }}
-          BUILD_END:             ${{ env.BUILD_END }}
-          GITHUB_SHA:            ${{ github.sha }}
-          GITHUB_RUN_NUMBER:     ${{ github.run_number }}
-          GITHUB_REPOSITORY:     ${{ github.repository }}
-          GITHUB_ACTOR:          ${{ github.actor }}
-        run: |
-          python3 << 'EOF'
-          import os, json, base64, subprocess
-
-          # Decode whatever the caller sent
-          md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
-
-          # --- CI context (static) ---
-          status   = md.pop('status','').upper()
-          build_no = md.pop('build','')
-          start    = os.environ['BUILD_START']
-          end      = os.environ['BUILD_END']
-          sha      = os.environ['GITHUB_SHA'][:8]
-          msg      = subprocess.check_output(
-                        ['git','log','-1','--pretty=format:%s']
-                      ).decode()
-          run_id   = os.environ['GITHUB_RUN_NUMBER']
-          actor    = os.environ['GITHUB_ACTOR']
-
-          # Build table rows for CI context
-          build_rows = "\n".join([
-            f"<tr><td><b>Status</b></td><td>{status}</td></tr>",
-            f"<tr><td><b>Build Number</b></td><td>#{build_no}</td></tr>",
-            f"<tr><td><b>Triggered By</b></td><td>{actor}</td></tr>",
-            f"<tr><td><b>Start Time</b></td><td>{start}</td></tr>",
-            f"<tr><td><b>End Time</b></td><td>{end}</td></tr>",
-            f"<tr><td><b>Commit</b></td><td>{sha} - {msg}</td></tr>",
-            f"<tr><td><b>Workflow Run</b></td><td>#{run_id}</td></tr>"
-          ])
-
-          # --- Release context (fully dynamic) ---
-          release_rows = "\n".join(
-            f"<tr><td><b>{k.replace('_',' ').title()}</b></td><td>{v}</td></tr>"
-            for k, v in md.items()
+          JSON=$(jq -n \
+            --arg product "Pathway" \
+            --arg branch  "${{ inputs.BRANCH }}" \
+            --arg version "$VERSION" \
+            --arg env     "${{ inputs.ENV }}" \
+            --arg status  "${{ needs.build.result }}" \
+            --arg build   "${{ github.run_number }}" \
+            '{
+              product: $product,
+              branch: $branch,
+              version: $version,
+              env: $env,
+              status: $status,
+              build: $build
+            }'
           )
+          echo "DEPLOY_META_JSON=$(echo "$JSON" | base64 -w0)" >> $GITHUB_OUTPUT
 
-          # --- Compose HTML ---
-          html = f"""
-          <html>
-            <body>
-              <h2>Build Information</h2>
-              <table border="1" cellpadding="6" cellspacing="0">
-                {build_rows}
-              </table>
-              <h2>Release Information</h2>
-              <table border="1" cellpadding="6" cellspacing="0">
-                {release_rows}
-              </table>
-              <p>
-                <a href="https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}">
-                  View Workflow Run
-                </a>
-              </p>
-            </body>
-          </html>
-          """
-          with open('email_body.html','w') as f:
-            f.write(html)
-
-          # Send one email per comma‐separated address
-          for addr in os.environ['RECIPIENTS'].split(','):
-            addr = addr.strip()
-            if not addr:
-              continue
-            subprocess.check_call([
-              "python3", ".github/workflows/mail.py",
-              addr,
-              f"[{end}] Build #{run_id}: {status}",
-              "email_body.html"
-            ])
-          EOF
+  notify:
+    needs: prepare-json
+    uses: ./.github/workflows/email-only.yml@main
+    with:
+      DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
+      RECIPIENTS:        ${{ inputs.RECIPIENTS }}
+      # ← pass these so your reusable step can link back:
+      SOURCE_REPO:       ${{ github.repository }}
+      SOURCE_RUN_ID:     ${{ github.run_id }}
