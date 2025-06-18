@@ -28,7 +28,7 @@ jobs:
 
   prepare-json:
     needs: build
-    if: always()   # notify on success AND failure
+    if: always()   # always notify, even on failure
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
@@ -74,3 +74,5 @@ jobs:
     with:
       DEPLOY_META_JSON: ${{ needs.prepare-json.outputs.DEPLOY_META_JSON }}
       RECIPIENTS:        ${{ inputs.RECIPIENTS }}
+      SOURCE_REPO:       ${{ github.repository }}
+      SOURCE_RUN_ID:     ${{ github.run_id }}
