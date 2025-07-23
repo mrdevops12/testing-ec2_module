@@ -31,12 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run build/tests
-        run: |
-          echo "Building..."
+        run: echo "Building..."
 
   prepare-json:
     needs: build
-    if: always()   # notify even on failure
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       DEPLOY_META_JSON: ${{ steps.encode.outputs.DEPLOY_META_JSON }}
