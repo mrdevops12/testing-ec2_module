@@ -1,0 +1,206 @@
+name: Teams + Email Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      DEPLOY_META_JSON:
+        description: 'Base64-encoded JSON with deployment metadata (any keys)'
+        required: true
+        type: string
+      EMAIL_TO:
+        description: 'Email address (or comma-separated list) to send the HTML email to'
+        required: false
+        type: string
+        default: ""
+      SOURCE_REPO:
+        description: 'The repository (owner/name) of the caller, for the “View Workflow Run” link'
+        required: true
+        type: string
+      SOURCE_RUN_ID:
+        description: 'The run_id of the caller workflow, for the “View Workflow Run” link'
+        required: true
+        type: string
+      SEND_TEAMS:
+        description: 'Post notification to Microsoft Teams?'
+        type: boolean
+        default: true
+      SEND_EMAIL:
+        description: 'Send HTML email notification?'
+        type: boolean
+        default: true
+
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams Incoming Webhook URL'
+        required: false   # only needed if SEND_TEAMS=true
+
+jobs:
+  notify-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Capture timestamps
+        run: |
+          echo "BUILD_START=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+          echo "BUILD_END=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+
+      - name: Validate required inputs (only when needed)
+        run: |
+          if [ "${{ inputs.SEND_EMAIL }}" = "true" ] && [ -z "${{ inputs.EMAIL_TO }}" ]; then
+            echo "❌ Missing EMAIL_TO but SEND_EMAIL=true" >&2
+            exit 1
+          fi
+          if [ "${{ inputs.SEND_TEAMS }}" = "true" ] && [ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]; then
+            echo "❌ Missing TEAMS_WEBHOOK_URL secret but SEND_TEAMS=true" >&2
+            exit 1
+          fi
+          if [ -z "${{ inputs.SOURCE_REPO }}" ]; then
+            echo "❌ Missing required input: SOURCE_REPO" >&2
+            exit 1
+          fi
+          if [ -z "${{ inputs.SOURCE_RUN_ID }}" ]; then
+            echo "❌ Missing required input: SOURCE_RUN_ID" >&2
+            exit 1
+          fi
+
+      - name: Build & send (conditionally) Teams + Email
+        env:
+          INPUT_DEPLOY_META_JSON: ${{ inputs.DEPLOY_META_JSON }}
+          TEAMS_WEBHOOK_URL:     ${{ secrets.TEAMS_WEBHOOK_URL }}
+          EMAIL_TO:              ${{ inputs.EMAIL_TO }}
+          SOURCE_REPO:           ${{ inputs.SOURCE_REPO }}
+          SOURCE_RUN_ID:         ${{ inputs.SOURCE_RUN_ID }}
+          BUILD_START:           ${{ env.BUILD_START }}
+          BUILD_END:             ${{ env.BUILD_END }}
+          GITHUB_SHA:            ${{ github.sha }}
+          GITHUB_ACTOR:          ${{ github.actor }}
+          SEND_TEAMS:            ${{ inputs.SEND_TEAMS }}
+          SEND_EMAIL:            ${{ inputs.SEND_EMAIL }}
+        run: |
+          python3 << 'EOF'
+          import os, json, base64, subprocess, pathlib
+
+          SEND_TEAMS = os.getenv('SEND_TEAMS', 'true').lower() == 'true'
+          SEND_EMAIL = os.getenv('SEND_EMAIL', 'true').lower() == 'true'
+
+          # Decode arbitrary payload
+          md = json.loads(base64.b64decode(os.environ['INPUT_DEPLOY_META_JSON']))
+
+          # Extract CI context
+          status   = md.pop('status', '').upper()
+          build_no = md.pop('build', '')
+          start    = os.environ['BUILD_START']
+          end      = os.environ['BUILD_END']
+          sha      = os.environ['GITHUB_SHA'][:8]
+          msg      = subprocess.check_output(
+                        ['git','log','-1','--pretty=format:%s']
+                      ).decode(errors='ignore')
+          actor    = os.environ['GITHUB_ACTOR']
+          repo     = os.environ['SOURCE_REPO']
+          run_id   = os.environ['SOURCE_RUN_ID']
+
+          # Emoji & color maps
+          emoji_map = {'SUCCESS':'✅','FAILED':'❌','CANCELLED':'⚠️'}
+          color_map = {'SUCCESS':'#00FF00','FAILED':'#FF0000','CANCELLED':'#FFA500'}
+          emoji = emoji_map.get(status, 'ℹ️')
+          theme = color_map.get(status, '#808080')
+
+          # Build facts
+          build_facts = [
+            {'name':'Status',        'value':f"{emoji} {status}"},
+            {'name':'Build Number',  'value':f"#{build_no}"},
+            {'name':'Triggered By',  'value':actor},
+            {'name':'Start Time',    'value':start},
+            {'name':'End Time',      'value':end},
+            {'name':'Commit',        'value':f"{sha} - {msg}"},
+            {'name':'Workflow Run',  'value':f"#{run_id}"}
+          ]
+
+          # Release facts (everything else in md)
+          release_facts = []
+          for k, v in md.items():
+            name = k.replace('_',' ').title()
+            release_facts.append({'name': name, 'value': str(v)})
+
+          # Assemble Teams card
+          card = {
+            "@type":"MessageCard",
+            "@context":"https://schema.org/extensions",
+            "themeColor": theme,
+            "summary": f"Build {status}",
+            "sections": [
+              {"activityTitle":"🔧 Build Information","facts":build_facts,"markdown":True},
+              {"startGroup":True,"text":"───────────────","markdown":True},
+              {"startGroup":True,"activityTitle":"🚀 Release Information","facts":release_facts,"markdown":True},
+              {
+                "startGroup": True,
+                "text": f"[View Workflow Run](https://github.com/{repo}/actions/runs/{run_id})",
+                "markdown": True
+              }
+            ],
+            "potentialAction": [
+              {"@type":"OpenUri","name":"View Workflow Run",
+               "targets":[{"os":"default",
+                           "uri":f"https://github.com/{repo}/actions/runs/{run_id}"}]},
+              {"@type":"OpenUri","name":"View Branch Commits",
+               "targets":[{"os":"default",
+                           "uri":f"https://github.com/{repo}/commits/{md.get('branch','')}"}]}
+            ]
+          }
+
+          # Save artifacts
+          pathlib.Path('card.json').write_text(json.dumps(card))
+          rows1 = "\n".join(
+            f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>"
+            for f in build_facts
+          )
+          rows2 = "\n".join(
+            f"<tr><td><b>{f['name']}</b></td><td>{f['value']}</td></tr>"
+            for f in release_facts
+          )
+          html = f"""
+          <html>
+            <body>
+              <h2>Build Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {rows1}
+              </table>
+              <h2>Release Information</h2>
+              <table border="1" cellpadding="6" cellspacing="0">
+                {rows2}
+              </table>
+              <p>
+                <a href="https://github.com/{repo}/actions/runs/{run_id}">
+                  View Workflow Run
+                </a>
+              </p>
+            </body>
+          </html>
+          """
+          pathlib.Path('email_body.html').write_text(html)
+
+          # Conditional sends
+          if SEND_TEAMS:
+            import requests
+            webhook = os.getenv('TEAMS_WEBHOOK_URL', '')
+            if webhook:
+              r = requests.post(webhook, json=card, headers={'Content-Type':'application/json'})
+              r.raise_for_status()
+
+          if SEND_EMAIL:
+            email_to = os.getenv('EMAIL_TO','')
+            if email_to.strip():
+              for addr in [a.strip() for a in email_to.split(',') if a.strip()]:
+                subprocess.check_call([
+                  "python3", ".github/workflows/mail.py",
+                  addr,
+                  f"[{end}] Build #{run_id}: {status}",
+                  "email_body.html"
+                ])
+          EOF
