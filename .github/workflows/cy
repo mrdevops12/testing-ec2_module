@@ -37,3 +37,30 @@ The client basically wants to know: “Which IP address(es) will CCP actually se
 
 CyberArk needs to whitelist those IPs against your AppID (e.g., awx-dev).
 If they don’t, CCP will return 401/403 Unauthorized, even though your Safe/Object is correct.
+
+
+
+
+
+
+
+
+EKS nodes and pods use private subnet 10.124.31.0/24.
+
+These private IPs cannot go directly to the internet (no IGW, no NAT).
+
+The default route (0.0.0.0/0) in the VPC route table points to the Transit Gateway (tgw-05dc7ad63f1c5dc85).
+
+All outbound traffic from EKS goes into this Transit Gateway.
+
+The TGW forwards the traffic to our corporate/on-prem network (via TGW attachment).
+
+In the corporate network, the traffic passes through a firewall/proxy device.
+
+That firewall/proxy assigns a fixed egress IP address (or a pool of IPs).
+
+When AWX calls CyberArk CCP, CCP does not see the 10.124.31.x subnet.
+
+CyberArk only sees the firewall/proxy egress IP(s) as the source.
+
+Those egress IP(s) are what you must give to the CyberArk team for AppID allow-listing.
