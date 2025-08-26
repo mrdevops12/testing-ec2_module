@@ -1,0 +1,7 @@
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: "github-arc"
+        static_configs:
+          - targets:
+              - "arc-controller.runner-controller.svc.cluster.local:8080"
