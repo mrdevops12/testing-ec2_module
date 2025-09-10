@@ -16,10 +16,11 @@ env:
   AWS_ROLE: arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access
   REGISTRY: 817786531545.dkr.ecr.us-east-1.amazonaws.com
   SRC_HELM_REPO: https://prometheus-community.github.io/helm-charts
+  HELM_EXPERIMENTAL_OCI: "1"
 
 jobs:
   sync:
-    runs-on: ${{ vars.BXD_GITHUB_RUNNER }}   # e.g. arc-rs-nonprod
+    runs-on: ${{ vars.BXD_GITHUB_RUNNER }}  # or arc-rs-nonprod
     permissions:
       id-token: write
       contents: read
@@ -34,18 +35,18 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # >>> Create the *full* repo path actions/prometheus/<chart>
-      - name: Ensure ECR repo exists (actions/prometheus/<chart>)
-        env:
-          REPO: actions/prometheus/${{ inputs.chart_name }}
+      - name: Ensure ECR repo exists (actions/prometheus/<chart_name>)
         run: |
-          set -e
+          REPO_PATH="actions/prometheus/${{ inputs.chart_name }}"
+          echo "Checking or creating ECR repo: $REPO_PATH"
           aws ecr describe-repositories \
-            --repository-names "$REPO" \
-            --region "$AWS_REGION" >/dev/null 2>&1 || \
+            --repository-names "$REPO_PATH" \
+            --region $AWS_REGION >/dev/null 2>&1 || \
           aws ecr create-repository \
-            --repository-name "$REPO" \
-            --region "$AWS_REGION"
+            --repository-name "$REPO_PATH" \
+            --region $AWS_REGION \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
 
       - name: Login to ECR (for Helm/OCI)
         run: |
@@ -58,11 +59,9 @@ jobs:
           helm repo update
           helm pull prometheus-community/${{ inputs.chart_name }} --version ${{ inputs.version }}
 
-      - name: Push chart into ECR (actions/prometheus/<chart>)
-        env:
-          TARGET_REPO: actions/prometheus/${{ inputs.chart_name }}
+      - name: Push chart into ECR (actions/prometheus/<chart_name>)
         run: |
-          set -euo pipefail
           FILE=$(ls ${{ inputs.chart_name }}-*.tgz)
-          echo "Pushing $FILE to oci://$REGISTRY/$TARGET_REPO"
-          helm push "$FILE" oci://$REGISTRY/$TARGET_REPO
+          REPO_PATH="actions/prometheus/${{ inputs.chart_name }}"
+          echo "Pushing $FILE to oci://$REGISTRY/$REPO_PATH"
+          helm push "$FILE" oci://$REGISTRY/$REPO_PATH
