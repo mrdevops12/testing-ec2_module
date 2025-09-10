@@ -18,26 +18,23 @@ on:
         default: prometheus
         type: string
 
-# ---- Edit these env values to match your account/role/region ----
 env:
   AWS_REGION: us-east-1
   AWS_ROLE: arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access
   REGISTRY: 817786531545.dkr.ecr.us-east-1.amazonaws.com
   SRC_HELM_REPO: https://prometheus-community.github.io/helm-charts
-# -----------------------------------------------------------------
+  HELM_EXPERIMENTAL_OCI: "1"
 
 jobs:
   sync:
-    # Use the same runner label you already use for your ARC jobs
     runs-on: ${{ vars.QDX_AWS_GHA_RUNNER }}
-
     permissions:
       contents: read
       id-token: write
 
     steps:
       - name: Checkout repository
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Download the chart tgz from public repo
         shell: bash
@@ -49,7 +46,6 @@ jobs:
 
           echo "Pulling chart ${INPUT_CHART} with version ${INPUT_VER}"
           helm pull prometheus-community/${INPUT_CHART} --version "${INPUT_VER}"
-
         env:
           INPUT_CHART: ${{ inputs.chart_name }}
           INPUT_VER: ${{ inputs.version }}
@@ -96,7 +92,6 @@ jobs:
 
           echo "Found chart package: ${FILE}"
           echo "Pushing to oci://${REGISTRY}/${ECR_REPO}"
-
           helm push "${FILE}" "oci://${REGISTRY}/${ECR_REPO}"
         env:
           INPUT_CHART: ${{ inputs.chart_name }}
