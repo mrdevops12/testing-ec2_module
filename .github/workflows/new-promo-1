@@ -1,1 +1,56 @@
+name: Sync Prometheus chart to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Prometheus chart version (e.g. 77.6.0)"
+        required: true
+      chart_name:
+        description: "Chart name"
+        default: kube-prometheus-stack
+        required: true
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE: arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access
+  REGISTRY: 817786531545.dkr.ecr.us-east-1.amazonaws.com
+  SRC_HELM_REPO: https://prometheus-community.github.io/helm-charts
+
+jobs:
+  sync:
+    runs-on: arc-rs-nonprod   # or ${{ vars.BXD_GITHUB_RUNNER }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure ECR repo under existing namespace (no IAM change)
+        run: |
+          aws ecr describe-repositories --repository-names "actions/prometheus" \
+            --region $AWS_REGION >/dev/null 2>&1 || \
+          aws ecr create-repository --repository-name "actions/prometheus" \
+            --region $AWS_REGION
+
+      - name: Login to ECR for Helm OCI
+        run: |
+          aws ecr get-login-password --region $AWS_REGION \
+            | helm registry login --username AWS --password-stdin $REGISTRY
+
+      - name: Pull Prometheus chart
+        run: |
+          helm repo add prometheus-community "$SRC_HELM_REPO"
+          helm repo update
+          helm pull prometheus-community/${{ inputs.chart_name }} --version ${{ inputs.version }}
+
+      - name: Push chart to ECR (under actions/prometheus)
+        run: |
+          FILE=$(ls ${{ inputs.chart_name }}-*.tgz)
+          helm push "$FILE" oci://$REGISTRY/actions/prometheus
 
