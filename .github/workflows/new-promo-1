@@ -1,68 +1,103 @@
-name: Sync Prometheus chart to private ECR
+name: Sync Prometheus Helm chart to private ECR
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "kube-prometheus-stack chart version to download (e.g. 65.6.0)"
+        description: "Version of the Prometheus chart to download (e.g. 77.6.0)"
         required: true
         type: string
-      repo_path:
-        description: "Target ECR repo path (same account; created on first push)"
-        required: false
-        default: "prometheus/kube-prometheus-stack"
+      chart_name:
+        description: "Chart name"
+        required: true
+        default: kube-prometheus-stack
+        type: string
+      ecr_namespace:
+        description: "ECR namespace (path prefix before the chart repo name)"
+        required: true
+        default: prometheus
         type: string
 
-# ── env is kept the same style as your ARC sync job ─────────────────────────────
+# ---- Edit these env values to match your account/role/region ----
 env:
-  AWS_REGION: "us-east-1"
-  AWS_ROLE: "arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access"
-  REGISTRY: "817786531545.dkr.ecr.us-east-1.amazonaws.com"
-
-  # Only differences vs ARC: the chart source is a Helm repo (not OCI).
-  SRC_HELM_REPO: "https://prometheus-community.github.io/helm-charts"
-  CHART_NAME: "kube-prometheus-stack"
+  AWS_REGION: us-east-1
+  AWS_ROLE: arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access
+  REGISTRY: 817786531545.dkr.ecr.us-east-1.amazonaws.com
+  SRC_HELM_REPO: https://prometheus-community.github.io/helm-charts
+# -----------------------------------------------------------------
 
 jobs:
-  download-chart:
-    # identical permissions/runs-on style as your ARC workflow
+  sync:
+    # Use the same runner label you already use for your ARC jobs
+    runs-on: ${{ vars.QDX_AWS_GHA_RUNNER }}
+
     permissions:
       contents: read
       id-token: write
-    runs-on: ${{ vars.QDX_AWS_GHA_RUNNER }}
 
     steps:
-      - name: checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+      - uses: actions/checkout@v4
 
-      
-
-      - name: Download the latest chart
+      - name: Download the chart tgz from public repo
+        shell: bash
         run: |
+          set -euo pipefail
+          echo "Adding Helm repo: ${SRC_HELM_REPO}"
           helm repo add prometheus-community "${SRC_HELM_REPO}"
           helm repo update
-          # Pull the requested version as a .tgz
-          helm pull prometheus-community/${CHART_NAME} --version "${{ inputs.version }}"
 
-      - name: Configure AWS credentials
+          echo "Pulling chart ${INPUT_CHART} with version ${INPUT_VER}"
+          helm pull prometheus-community/${INPUT_CHART} --version "${INPUT_VER}"
+
+        env:
+          INPUT_CHART: ${{ inputs.chart_name }}
+          INPUT_VER: ${{ inputs.version }}
+
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE }}
-          role-session-name: ${{ github.repository_id }}-${{ github.job }}-${{ github.triggering_actor }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: check role assumed
-        run: aws sts get-caller-identity
-
-      - name: Login to Amazon ECR Private
-        id: login-ecr
+      - name: Ensure ECR Helm repository exists (idempotent)
+        shell: bash
         run: |
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login --username AWS --password-stdin $REGISTRY
+          set -euo pipefail
+          ECR_REPO="${ECR_NAMESPACE}/${CHART}"
+          echo "Ensuring ECR repository exists: ${ECR_REPO}"
 
-      - name: Push chart
+          if ! aws ecr describe-repositories --repository-names "${ECR_REPO}" >/dev/null 2>&1; then
+            aws ecr create-repository \
+              --repository-name "${ECR_REPO}" \
+              --image-scanning-configuration scanOnPush=true \
+              --encryption-configuration encryptionType=AES256
+            echo "Created ECR repo: ${ECR_REPO}"
+          else
+            echo "ECR repo already exists: ${ECR_REPO}"
+          fi
+        env:
+          CHART: ${{ inputs.chart_name }}
+          ECR_NAMESPACE: ${{ inputs.ecr_namespace }}
+
+      - name: Login to Amazon ECR (for Helm OCI)
+        shell: bash
         run: |
-          FILE="$(ls ${CHART_NAME}-*.tgz)"
-          echo "Found: $FILE"
-          # Same push pattern as ARC: push to your private ECR (OCI)
-          helm push "$FILE" oci://${REGISTRY}/${{ inputs.repo_path }}
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${REGISTRY}"
+
+      - name: Push chart to ECR (OCI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHART="${INPUT_CHART}"
+          ECR_REPO="${ECR_NAMESPACE}/${CHART}"
+          FILE="$(ls ${CHART}-*.tgz)"
+
+          echo "Found chart package: ${FILE}"
+          echo "Pushing to oci://${REGISTRY}/${ECR_REPO}"
+
+          helm push "${FILE}" "oci://${REGISTRY}/${ECR_REPO}"
+        env:
+          INPUT_CHART: ${{ inputs.chart_name }}
+          ECR_NAMESPACE: ${{ inputs.ecr_namespace }}
