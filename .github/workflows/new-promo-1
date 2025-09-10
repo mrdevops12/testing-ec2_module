@@ -1,0 +1,68 @@
+name: Sync Prometheus chart to private ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "kube-prometheus-stack chart version to download (e.g. 65.6.0)"
+        required: true
+        type: string
+      repo_path:
+        description: "Target ECR repo path (same account; created on first push)"
+        required: false
+        default: "prometheus/kube-prometheus-stack"
+        type: string
+
+# ── env is kept the same style as your ARC sync job ─────────────────────────────
+env:
+  AWS_REGION: "us-east-1"
+  AWS_ROLE: "arn:aws:iam::817786531545:role/iam-role-gh-runner-oidc-access"
+  REGISTRY: "817786531545.dkr.ecr.us-east-1.amazonaws.com"
+
+  # Only differences vs ARC: the chart source is a Helm repo (not OCI).
+  SRC_HELM_REPO: "https://prometheus-community.github.io/helm-charts"
+  CHART_NAME: "kube-prometheus-stack"
+
+jobs:
+  download-chart:
+    # identical permissions/runs-on style as your ARC workflow
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ${{ vars.QDX_AWS_GHA_RUNNER }}
+
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      
+
+      - name: Download the latest chart
+        run: |
+          helm repo add prometheus-community "${SRC_HELM_REPO}"
+          helm repo update
+          # Pull the requested version as a .tgz
+          helm pull prometheus-community/${CHART_NAME} --version "${{ inputs.version }}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          role-session-name: ${{ github.repository_id }}-${{ github.job }}-${{ github.triggering_actor }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: check role assumed
+        run: aws sts get-caller-identity
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        run: |
+          aws ecr get-login-password --region $AWS_REGION \
+            | docker login --username AWS --password-stdin $REGISTRY
+
+      - name: Push chart
+        run: |
+          FILE="$(ls ${CHART_NAME}-*.tgz)"
+          echo "Found: $FILE"
+          # Same push pattern as ARC: push to your private ECR (OCI)
+          helm push "$FILE" oci://${REGISTRY}/${{ inputs.repo_path }}
