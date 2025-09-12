@@ -1,0 +1,62 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "env (dev|prd)"
+        required: true
+        default: "prd"
+
+permissions:
+  id-token: write     # for OIDC -> AWS
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'prd' }}
+  # Use your existing org secret for the sharedtools ECR (simple & works for plan)
+  TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
+
+jobs:
+  plan:
+    name: terraform-plan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Assume the role in the EKS account (333591051173) via OIDC
+      - name: Configure AWS (EKS account)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_EKS }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.3.2
+
+      # Remote state (S3/DynamoDB) config lives in tfbackends/devops-<env>.tfbackend
+      - name: Terraform Init (remote state)
+        run: terraform init --reconfigure -backend-config="tfbackends/devops-${{ env.ENVIRONMENT }}.tfbackend"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Plan using tfvars/orion-<env>.tfvars (as you showed in screenshots)
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars" \
+            -out="plan-${{ env.ENVIRONMENT }}.out"
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tf-plan-${{ env.ENVIRONMENT }}
+          path: plan-${{ env.ENVIRONMENT }}.out
+          if-no-files-found: error
