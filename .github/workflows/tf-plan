@@ -10,13 +10,14 @@ on:
         default: "prd"
 
 permissions:
-  id-token: write     # for OIDC -> AWS
+  id-token: write      # OIDC to assume AWS role
   contents: read
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
+  # Resolve region from Secret, then from Org/Repo Variable, else default to us-east-1
+  AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || (vars.AWS_REGION != '' && vars.AWS_REGION || 'us-east-1') }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'prd' }}
-  # Use your existing org secret for the sharedtools ECR (simple & works for plan)
+  # Prometheus Helm chart in sharedtools ECR (used by TF during plan)
   TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
 
 jobs:
@@ -28,11 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Assume the role in the EKS account (333591051173) via OIDC
+      # Assume role in the EKS account
       - name: Configure AWS (EKS account)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_EKS }}
+          role-to-assume: ${{ secrets.AWS_ROLE_EKS }}  # full role ARN in EKS account
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
@@ -40,14 +41,14 @@ jobs:
         with:
           terraform_version: 1.3.2
 
-      # Remote state (S3/DynamoDB) config lives in tfbackends/devops-<env>.tfbackend
+      # Remote state backend lives in tfbackends/devops-<env>.tfbackend
       - name: Terraform Init (remote state)
         run: terraform init --reconfigure -backend-config="tfbackends/devops-${{ env.ENVIRONMENT }}.tfbackend"
 
       - name: Terraform Validate
         run: terraform validate
 
-      # Plan using tfvars/orion-<env>.tfvars (as you showed in screenshots)
+      # Use your per-env tfvars file (e.g., tfvars/orion-prd.tfvars or tfvars/orion-dev.tfvars)
       - name: Terraform Plan
         run: |
           terraform plan \
