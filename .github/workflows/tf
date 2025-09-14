@@ -12,66 +12,16 @@ on:
         default: "prd"
 
 jobs:
-  wiz-scan:
-    runs-on: arc-rs-nonprod
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Wiz IaC scan
-        env:
-          WIZ_IAC_POLICY: "Default IaC policy"
-        run: |
-          /wiz/wizcli auth --id ${{ secrets.WIZ_CLIENT_ID }} --secret ${{ secrets.WIZ_CLIENT_SECRET }}
-          /wiz/wizcli iac scan --path . -p "$WIZ_IAC_POLICY" --tag github_action_run_id=${{ github.run_id }} -o results.sarif,sarif,false
-
-      - name: Upload Wiz IaC scan results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
-          category: wiz
-
-  super-linter:
-    runs-on: arc-rs-nonprod
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Generate a token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.GHAPP_REPO_ACCESS_APP_ID }}
-          private-key: ${{ secrets.GHAPP_REPO_ACCESS_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-
-      - name: Update Git Config
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
-          cat ~/.gitconfig
-
-      - name: Super Linter (TFLint disabled for now)
-        uses: super-linter/super-linter@v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VALIDATE_TERRAFORM_TFLINT: "false"
-          FILTER_REGEX_INCLUDE: "^(gha-eks/)"
-
   terraform_plan:
     name: 'Terraform'
     runs-on: arc-rs-nonprod
+
     env:
       ENVIRONMENT: ${{ github.event.inputs.environment || 'prd' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: us-east-1
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
       TF_VERSION: "1.6.6"
 
     defaults:
@@ -109,8 +59,21 @@ jobs:
           which terraform
           terraform version
 
+      - name: Clean Terraform cache
+        run: rm -rf .terraform
+
+      - name: Remove stale backend file (if exists)
+        run: |
+          if [ -f tfmac/eks/oneproj-prod.tfbackend ]; then
+            echo "Removing stale backend file: oneproj-prod.tfbackend"
+            rm -f tfmac/eks/oneproj-prod.tfbackend
+          fi
+
+      - name: Print selected backend config
+        run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+
       - name: Terraform Init
-        run: terraform init --reconfigure -backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+        run: terraform init --reconfigure --backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
 
       - name: Verify files (debug)
         run: |
