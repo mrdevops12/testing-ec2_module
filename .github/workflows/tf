@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate a token (for private modules/repos)
+      - name: Generate GitHub App token (for private modules/repos)
         id: generate-token
         uses: actions/create-github-app-token@v1
         with:
@@ -62,12 +62,12 @@ jobs:
       - name: Clean Terraform cache
         run: rm -rf .terraform
 
-      - name: Remove stale backend file (if exists)
+      - name: Remove stale backend files (safety check)
         run: |
-          if [ -f tfmac/eks/oneproj-prod.tfbackend ]; then
-            echo "Removing stale backend file: oneproj-prod.tfbackend"
-            rm -f tfmac/eks/oneproj-prod.tfbackend
-          fi
+          find . -name "*.tfbackend" | grep use_localfile | while read file; do
+            echo "Removing stale backend file: $file"
+            rm -f "$file"
+          done
 
       - name: Print selected backend config
         run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
