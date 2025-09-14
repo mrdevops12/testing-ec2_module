@@ -19,19 +19,28 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Wiz IaC scan
-        env: { WIZ_IAC_POLICY: "Default IaC policy" }
+        env:
+          WIZ_IAC_POLICY: "Default IaC policy"
         run: |
           /wiz/wizcli auth --id ${{ secrets.WIZ_CLIENT_ID }} --secret ${{ secrets.WIZ_CLIENT_SECRET }}
           /wiz/wizcli iac scan --path . -p "$WIZ_IAC_POLICY" --tag github_action_run_id=${{ github.run_id }} -o results.sarif,sarif,false
-      - uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: results.sarif, category: wiz }
+
+      - name: Upload Wiz IaC scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: wiz
 
   super-linter:
     runs-on: arc-rs-nonprod
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Generate a token
         id: generate-token
         uses: actions/create-github-app-token@v1
@@ -39,11 +48,14 @@ jobs:
           app-id: ${{ secrets.GHAPP_REPO_ACCESS_APP_ID }}
           private-key: ${{ secrets.GHAPP_REPO_ACCESS_APP_KEY }}
           owner: ${{ github.repository_owner }}
+
       - name: Update Git Config
-        env: { GH_TOKEN: ${{ steps.generate-token.outputs.token }} }
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
           cat ~/.gitconfig
+
       - name: Super Linter (TFLint disabled for now)
         uses: super-linter/super-linter@v7
         env:
@@ -68,7 +80,8 @@ jobs:
         working-directory: gha-eks
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Generate a token (for private modules/repos)
         id: generate-token
@@ -79,13 +92,15 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Update Git Config
-        env: { GH_TOKEN: ${{ steps.generate-token.outputs.token }} }
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
           cat ~/.gitconfig
 
-      # Try the official setup first (OK if blocked), then ensure locally.
+      # Install Terraform (action first; runner-local fallback)
       - name: Setup Terraform
+        id: tf-setup
         uses: hashicorp/setup-terraform@v3
         continue-on-error: true
         with:
@@ -93,35 +108,32 @@ jobs:
           terraform_wrapper: false
 
       - name: Ensure Terraform present (no sudo)
+        if: steps.tf-setup.outcome != 'success'
         run: |
           set -e
-          if ! command -v terraform >/dev/null 2>&1; then
-            echo "Terraform not found; installing to \$HOME/.local/bin"
-            mkdir -p "$HOME/.local/bin" "$RUNNER_TEMP"
-            ARCH=$(uname -m)
-            case "$ARCH" in
-              x86_64)   TARCH=linux_amd64 ;;
-              aarch64|arm64) TARCH=linux_arm64 ;;
-              *) echo "Unsupported arch: $ARCH"; exit 1 ;;
-            esac
-            URL="https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_${TARCH}.zip"
-            echo "Downloading $URL"
-            curl -fsSL -o "$RUNNER_TEMP/terraform.zip" "$URL"
-            if command -v unzip >/dev/null 2>&1; then
-              unzip -o "$RUNNER_TEMP/terraform.zip" -d "$HOME/.local/bin"
-            else
-              python3 - <<'PY'
+          mkdir -p "$HOME/.local/bin" "$RUNNER_TEMP"
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64)   TARCH=linux_amd64 ;;
+            aarch64|arm64) TARCH=linux_arm64 ;;
+            *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          URL="https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_${TARCH}.zip"
+          echo "Downloading $URL"
+          curl -fsSL -o "$RUNNER_TEMP/terraform.zip" "$URL"
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -o "$RUNNER_TEMP/terraform.zip" -d "$HOME/.local/bin"
+          else
+            python3 - <<'PY'
 import os, zipfile
 p=os.environ['RUNNER_TEMP']+'/terraform.zip'
 d=os.path.expanduser('~')+'/.local/bin'
 zipfile.ZipFile(p).extractall(d)
 PY
-            fi
-            chmod +x "$HOME/.local/bin/terraform"
-            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           fi
-          which terraform
-          terraform version
+          chmod +x "$HOME/.local/bin/terraform"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          which terraform && terraform version
 
       - name: Terraform Init
         run: terraform init --reconfigure -backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
