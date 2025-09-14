@@ -64,10 +64,18 @@ jobs:
 
       - name: Remove stale backend files (safety check)
         run: |
-          find . -name "*.tfbackend" | grep use_localfile | while read file; do
-            echo "Removing stale backend file: $file"
-            rm -f "$file"
-          done
+          FILES=$(find . -name "*.tfbackend" | xargs grep -l "use_localfile" || true)
+          if [ -z "$FILES" ]; then
+            echo "✅ No stale backend files found."
+          else
+            echo "⚠️ Stale backend files detected:"
+            echo "$FILES"
+            echo "🧹 Removing them..."
+            echo "$FILES" | while read file; do
+              rm -f "$file"
+              echo "Removed: $file"
+            done
+          fi
 
       - name: Print selected backend config
         run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
