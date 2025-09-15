@@ -24,10 +24,6 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       TF_VERSION: "1.6.6"
 
-    defaults:
-      run:
-        shell: bash
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,7 +51,8 @@ jobs:
 
       - name: Run Terraform Plan
         run: |
-          cd quest-eks-addons
+          cd "$GITHUB_WORKSPACE/quest-eks-addons"
+          echo "✅ Entered quest-eks-addons"
           rm -rf .terraform
           echo "🔍 Checking backend file:"
           cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
