@@ -24,17 +24,18 @@ jobs:
       AWS_DEFAULT_REGION:    us-east-1
       TF_VERSION:            "1.6.6"
 
-    # Terraform root is the addons repo folder
+    # IMPORTANT: run from the exact folder you showed
     defaults:
       run:
         shell: bash
-        working-directory: gha-eks-addons
+        working-directory: gha-eks-addons/quest-eks-addons
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate GitHub App token (for private modules/repos)
+      # If you fetch private modules, keep this token + git config; otherwise you can drop both
+      - name: Generate GitHub App token
         id: generate-token
         uses: actions/create-github-app-token@v1
         with:
@@ -47,7 +48,7 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
-          cat ~/.gitconfig
+          git config --global --get-regexp 'url.*insteadOf' || true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -55,20 +56,18 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      - name: Verify location and files
+      - name: Verify location & required files
         run: |
           echo "CWD: $(pwd)"
           ls -la
-          echo "Backend file:"
-          sed -n '1,50p' tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
-          echo "TFVARS file:"
-          sed -n '1,50p' tfvars/orion-${{ env.ENVIRONMENT }}.tfvars || true
+          test -f "tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend" || { echo "Missing backend file tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend"; exit 1; }
+          test -f "tfvars/orion-${{ env.ENVIRONMENT }}.tfvars" || { echo "Missing var file tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"; exit 1; }
 
-      - name: Terraform Init (use backend file from repo)
-        run: terraform init --reconfigure -backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+      - name: Terraform Init (uses backend file from repo)
+        run: terraform init --reconfigure -backend-config="tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend"
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -input=false -no-color -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars
+        run: terraform plan -input=false -no-color -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"
