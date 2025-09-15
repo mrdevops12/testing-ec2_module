@@ -47,14 +47,6 @@ jobs:
           git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
           cat ~/.gitconfig
 
-      - name: Confirm quest-eks-addons folder exists
-        run: |
-          if [ ! -d "quest-eks-addons" ]; then
-            echo "❌ Folder not found: quest-eks-addons"
-            exit 1
-          fi
-          echo "✅ Folder found: quest-eks-addons"
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -65,15 +57,15 @@ jobs:
         run: |
           which terraform
           terraform version
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Clean Terraform cache
         run: rm -rf .terraform
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Remove stale backend files (safety check)
         run: |
-          FILES=$(find . -name "*.tfbackend" | xargs grep -l "use_localfile\|use_lockfile" || true)
+          FILES=$(find tfbackends -name "*.tfbackend" | xargs grep -l "use_localfile\|use_lockfile" || true)
           if [ -z "$FILES" ]; then
             echo "✅ No stale backend files found."
           else
@@ -84,15 +76,15 @@ jobs:
               echo "Removed: $file"
             done
           fi
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Print selected backend config
         run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Terraform Init
         run: terraform init --reconfigure --backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Verify files (debug)
         run: |
@@ -101,12 +93,12 @@ jobs:
           ls -la tfvars
           ls -la tfbackends
           ls -la modules
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Terraform Validate
         run: terraform validate
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
 
       - name: Terraform Plan
         run: terraform plan -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars
-        working-directory: quest-eks-addons
+        working-directory: ./quest-eks-addons
