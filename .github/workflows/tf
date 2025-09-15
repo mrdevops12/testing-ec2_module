@@ -27,7 +27,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: quest-eks-addons
 
     steps:
       - name: Checkout
@@ -58,9 +57,11 @@ jobs:
         run: |
           which terraform
           terraform version
+        working-directory: quest-eks-addons
 
       - name: Clean Terraform cache
         run: rm -rf .terraform
+        working-directory: quest-eks-addons
 
       - name: Remove stale backend files (safety check)
         run: |
@@ -75,12 +76,15 @@ jobs:
               echo "Removed: $file"
             done
           fi
+        working-directory: quest-eks-addons
 
       - name: Print selected backend config
         run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+        working-directory: quest-eks-addons
 
       - name: Terraform Init
         run: terraform init --reconfigure --backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+        working-directory: quest-eks-addons
 
       - name: Verify files (debug)
         run: |
@@ -89,9 +93,12 @@ jobs:
           ls -la tfvars
           ls -la tfbackends
           ls -la modules
+        working-directory: quest-eks-addons
 
       - name: Terraform Validate
         run: terraform validate
+        working-directory: quest-eks-addons
 
       - name: Terraform Plan
         run: terraform plan -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars
+        working-directory: quest-eks-addons
