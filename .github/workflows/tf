@@ -88,6 +88,7 @@ jobs:
           ls -la
           ls -la tfvars
           ls -la tfbackends
+          ls -la modules
 
       - name: Terraform Validate
         run: terraform validate
