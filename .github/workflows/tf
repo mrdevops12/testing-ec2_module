@@ -47,6 +47,12 @@ jobs:
           git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
           cat ~/.gitconfig
 
+      - name: Confirm quest-eks-addons folder exists
+        run: |
+          echo "Checking folder path..."
+          ls -la
+          ls -la quest-eks-addons
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
