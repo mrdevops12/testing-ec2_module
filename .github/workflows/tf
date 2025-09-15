@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate GitHub App token (for private modules/repos)
+      - name: Generate GitHub App token
         id: generate-token
         uses: actions/create-github-app-token@v1
         with:
@@ -53,52 +53,12 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      - name: Verify Terraform install
+      - name: Run Terraform Plan
         run: |
-          which terraform
-          terraform version
-        working-directory: quest-eks-addons
-
-      - name: Clean Terraform cache
-        run: rm -rf .terraform
-        working-directory: quest-eks-addons
-
-      - name: Remove stale backend files (safety check)
-        run: |
-          FILES=$(find tfbackends -name "*.tfbackend" | xargs grep -l "use_localfile\|use_lockfile" || true)
-          if [ -z "$FILES" ]; then
-            echo "✅ No stale backend files found."
-          else
-            echo "⚠️ Stale backend files detected:"
-            echo "$FILES"
-            echo "$FILES" | while read file; do
-              rm -f "$file"
-              echo "Removed: $file"
-            done
-          fi
-        working-directory: quest-eks-addons
-
-      - name: Print selected backend config
-        run: cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
-        working-directory: quest-eks-addons
-
-      - name: Terraform Init
-        run: terraform init --reconfigure --backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
-        working-directory: quest-eks-addons
-
-      - name: Verify files (debug)
-        run: |
-          pwd
-          ls -la
-          ls -la tfvars
-          ls -la tfbackends
-          ls -la modules
-        working-directory: quest-eks-addons
-
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: quest-eks-addons
-
-      - name: Terraform Plan
-        run: terraform plan -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars
-        working-directory: quest-eks-addons
+          cd quest-eks-addons
+          rm -rf .terraform
+          echo "🔍 Checking backend file:"
+          cat tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+          terraform init --reconfigure --backend-config=tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend
+          terraform validate
+          terraform plan -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars
