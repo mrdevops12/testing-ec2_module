@@ -27,7 +27,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: gha-eks
+        working-directory: quest-eks-addons
 
     steps:
       - name: Checkout
@@ -64,13 +64,12 @@ jobs:
 
       - name: Remove stale backend files (safety check)
         run: |
-          FILES=$(find . -name "*.tfbackend" | xargs grep -l "use_localfile" || true)
+          FILES=$(find . -name "*.tfbackend" | xargs grep -l "use_localfile\|use_lockfile" || true)
           if [ -z "$FILES" ]; then
             echo "✅ No stale backend files found."
           else
             echo "⚠️ Stale backend files detected:"
             echo "$FILES"
-            echo "🧹 Removing them..."
             echo "$FILES" | while read file; do
               rm -f "$file"
               echo "Removed: $file"
