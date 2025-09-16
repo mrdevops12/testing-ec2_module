@@ -47,12 +47,17 @@ module "falcon-sensor" {
     TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
   run: terraform validate
 
+
+
 - name: Terraform Plan
+  working-directory: quest-eks-addons
+  env:
+    TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
+    TF_VAR_falcon_cid:   ${{ secrets.FALCON_CID }}
   run: |
     terraform plan -input=false -no-color \
-      -var "ecr_password=${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}" \
-      -var "falcon_cid=${{ secrets.FALCON_CID }}" \
       -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"
+
 
 
 
