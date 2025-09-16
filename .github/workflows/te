@@ -33,4 +33,25 @@ resource "helm_release" "prometheus_stack" {
   values = [ file("${path.module}/arc-scrape-config.yaml") ]
 }
 
+module "falcon-sensor" {
+  source = "./modules/falcon-sensor"
+
+  # …existing inputs…
+  falcon_cid   = var.falcon_cid
+  ecr_password = var.ecr_password  # if you use ECR-auth for the module
+}
+
+- name: Terraform Validate
+  env:
+    TF_VAR_falcon_cid: ${{ secrets.FALCON_CID }}
+    TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
+  run: terraform validate
+
+- name: Terraform Plan
+  run: |
+    terraform plan -input=false -no-color \
+      -var "ecr_password=${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}" \
+      -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"
+
+
 
