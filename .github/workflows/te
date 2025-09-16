@@ -1,0 +1,21 @@
+variable "ecr_password" {
+  description = "Password/token to pull Helm charts from private ECR"
+  type        = string
+  sensitive   = true
+}
+
+
+terraform plan \
+  -var-file=tfvars/orion-${{ env.ENVIRONMENT }}.tfvars \
+  -var "ecr_password=${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}"
+
+
+
+repository = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com/actions/prometheus"
+chart      = "kube-prometheus-stack"
+version    = var.prometheus_chart_version
+
+prometheus_chart_repo    = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
+prometheus_chart_version = "77.6.0"
+# (plus cluster_name etc.)
+
