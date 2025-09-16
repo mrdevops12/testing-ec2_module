@@ -1,0 +1,80 @@
+name: "Terraform GitHub Actions"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "env (dev|prd)"
+        required: true
+        default: "prd"
+
+jobs:
+  terraform_plan:
+    name: Terraform
+    runs-on: arc-rs-nonprod
+
+    env:
+      ENVIRONMENT:           ${{ github.event.inputs.environment || 'prd' }}
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN:     ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION:    us-east-1
+      TF_VERSION:            "1.6.6"
+
+    # All terraform commands run inside this directory
+    defaults:
+      run:
+        shell: bash
+        working-directory: gha-eks-addons/quest-eks-addons
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Keep these 2 steps if you pull private modules from QXDSOSandboxOrg; otherwise you can remove them
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GHAPP_REPO_ACCESS_APP_ID }}
+          private-key: ${{ secrets.GHAPP_REPO_ACCESS_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Update Git Config
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          git config --global url."https://${{ github.actor }}:${{ env.GH_TOKEN }}@github.com/QXDSOSandboxOrg/".insteadOf "https://github.com/QXDSOSandboxOrg/"
+          git config --global --get-regexp 'url.*insteadOf' || true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Verify location & required files
+        run: |
+          echo "CWD: $(pwd)"
+          ls -la
+          test -f "tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend" || { echo "Missing backend file tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend"; exit 1; }
+          test -f "tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"      || { echo "Missing var file tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"; exit 1; }
+
+      - name: Terraform Init (uses backend file from repo)
+        run: terraform init --reconfigure --backend-config="tfbackends/orion-${{ env.ENVIRONMENT }}.tfbackend"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        env:
+          # if Falcon variables are still referenced, these satisfy them
+          TF_VAR_falcon_cid:   ${{ secrets.FALCON_CID }}
+          # Prometheus chart auth (ECR password)
+          TF_VAR_ecr_password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
+        run: |
+          terraform plan -input=false -no-color \
+            -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars"
