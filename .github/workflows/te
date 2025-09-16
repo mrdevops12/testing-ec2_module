@@ -19,3 +19,18 @@ prometheus_chart_repo    = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
 prometheus_chart_version = "77.6.0"
 # (plus cluster_name etc.)
 
+
+# modules/prometheus_stack/main.tf
+resource "helm_release" "prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  namespace  = var.namespace
+
+  repository = var.prometheus_chart_repo
+  chart      = "actions/prometheus/kube-prometheus-stack"
+  version    = var.prometheus_chart_version
+
+  atomic = true
+  values = [ file("${path.module}/arc-scrape-config.yaml") ]
+}
+
+
