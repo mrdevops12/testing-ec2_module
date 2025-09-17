@@ -61,3 +61,24 @@ module "falcon-sensor" {
 
 
 
+
+
+resource "helm_release" "prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = var.prometheus_chart_repo
+  chart      = "actions/prometheus/kube-prometheus-stack"
+  version    = var.prometheus_chart_version
+
+  namespace        = var.namespace         # "monitoring"
+  create_namespace = true                  # <— enable this
+
+  atomic  = true
+  values  = [file("${path.module}/arc-scrape-config.yaml")]
+}
+
+
+
+
+
+
+
