@@ -78,6 +78,40 @@ resource "helm_release" "prometheus_stack" {
 
 
 
+###########################
+
+# modules/prometheus_stack/main.tf (add this block)
+resource "kubectl_manifest" "monitoring_namespace" {
+  yaml_body = <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${var.namespace}       # default "monitoring"
+  labels:
+    kubernetes.io/metadata.name: ${var.namespace}
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: v1.30
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: v1.30
+YAML
+}
+
+# keep your Helm release, but don't create the namespace here
+resource "helm_release" "prometheus_stack" {
+  name             = "kube-prometheus-stack"
+  namespace        = var.namespace
+  create_namespace = false                    # <— changed
+  repository       = var.prometheus_chart_repo
+  chart            = "actions/prometheus/kube-prometheus-stack"
+  version          = var.prometheus_chart_version
+  atomic           = true
+  values           = [file("${path.module}/arc-scrape-config.yaml")]
+
+  depends_on = [kubectl_manifest.monitoring_namespace]
+}
+
 
 
 
