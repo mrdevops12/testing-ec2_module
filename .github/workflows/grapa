@@ -1,212 +1,167 @@
-gha-eks-addons/quest-eks-addons/modules/grafana/
-
-1) variables.tf
+modules/grafana/variables.tf
 
 
 variable "namespace" {
-  description = "Namespace to deploy Grafana"
+  description = "Namespace to deploy Grafana (use the same as Prometheus, e.g. monitoring)"
   type        = string
 }
 
 variable "grafana_chart_repo" {
-  description = "ECR OCI repo base (e.g. oci://<acct>.dkr.ecr.us-east-1.amazonaws.com)"
+  description = "OCI base for ECR (e.g. oci://817786531545.dkr.ecr.us-east-1.amazonaws.com)"
   type        = string
 }
 
 variable "grafana_chart_version" {
-  description = "Grafana Helm chart version in ECR (e.g. 8.6.2)"
+  description = "Grafana chart version (the tag you pushed to ECR, e.g. 8.6.2)"
   type        = string
 }
 
 variable "host" {
-  description = "Grafana hostname (e.g. grafana.devops-tools.prd.aws.qdx.com)"
+  description = "FQDN for Grafana (e.g. grafana.devops-tools.prd.aws.qdx.com)"
   type        = string
 }
 
 variable "alb_scheme" {
-  description = "ALB scheme (internal|internet-facing)"
+  description = "ALB scheme: internal | internet-facing"
   type        = string
   default     = "internal"
 }
 
-variable "certificate_arn" {
-  description = "ACM certificate ARN to enable HTTPS on the ALB (leave empty for HTTP only)"
+variable "admin_user" {
+  description = "Grafana admin user (optional)"
+  type        = string
+  default     = "admin"
+}
+
+variable "admin_password" {
+  description = "Grafana admin password (optional). Leave empty to let the chart generate one."
   type        = string
   default     = ""
+  sensitive   = true
 }
 
-variable "external_dns_hostname" {
-  description = "Optional ExternalDNS hostname annotation (leave empty if not using ExternalDNS)"
+variable "prometheus_url" {
+  description = "Prometheus URL for default datasource"
   type        = string
-  default     = ""
-}
-
-variable "admin_existing_secret" {
-  description = "Optional secret name that holds the admin password (key: admin-password)"
-  type        = string
-  default     = ""
-}
-
-variable "admin_existing_secret_key" {
-  description = "Key in admin_existing_secret containing the password"
-  type        = string
-  default     = "admin-password"
+  default     = "http://kube-prometheus-stack-prometheus.monitoring:9090"
 }
 
 
-2) main.tf
 
+modules/grafana/main.tf
 
-# NOTE: this module assumes helm/kubernetes providers are configured in root.
-# Do NOT add required_providers here to avoid the kubectl source mismatch you hit before.
+locals {
+  # Base values (HTTP-only ALB, internal)
+  base_values = {
+    service = {
+      type = "ClusterIP"
+      port = 80
+    }
+
+    # Optional but recommended so redirects/links are correct
+    grafana.ini = {
+      server = {
+        root_url = "http://${var.host}"
+      }
+    }
+
+    # Default Prometheus datasource
+    datasources = {
+      "datasources.yaml" = {
+        apiVersion  = 1
+        datasources = [{
+          name      = "Prometheus"
+          type      = "prometheus"
+          access    = "proxy"
+          url       = var.prometheus_url
+          isDefault = true
+        }]
+      }
+    }
+
+    ingress = {
+      enabled          = true
+      ingressClassName = "alb"
+      annotations = {
+        "kubernetes.io/ingress.class"            = "alb"    # for older clusters
+        "alb.ingress.kubernetes.io/scheme"       = var.alb_scheme
+        "alb.ingress.kubernetes.io/target-type"  = "ip"
+        "alb.ingress.kubernetes.io/listen-ports" = "[{\"HTTP\":80}]"  # HTTP only now
+        # NOTE: no certificate-arn / ssl-redirect here; we’ll add later when you switch to HTTPS
+      }
+      hosts = [{
+        host  = var.host
+        paths = [{
+          path     = "/"
+          pathType = "Prefix"
+        }]
+      }]
+      tls = []  # no TLS entries for now
+    }
+  }
+
+  # Only set admin creds if you provide a password
+  cred_values = var.admin_password != "" ? {
+    adminUser     = var.admin_user
+    adminPassword = var.admin_password
+  } : {}
+}
 
 resource "helm_release" "grafana" {
   name             = "grafana"
   namespace        = var.namespace
   create_namespace = false
 
-  repository = var.grafana_chart_repo
-  chart      = "actions/grafana/grafana"
+  # For OCI charts:
+  #   repository = "oci://<registry>"
+  #   chart      = "<repo path>"
+  repository = var.grafana_chart_repo                     # e.g. oci://817786531545.dkr.ecr.us-east-1.amazonaws.com
+  chart      = "actions/grafana"                          # you pushed to /actions/grafana
   version    = var.grafana_chart_version
   atomic     = true
 
-  values = [
-    templatefile("${path.module}/values.tftpl", {
-      host                   = var.host
-      scheme                 = var.alb_scheme
-      certificate_arn        = var.certificate_arn
-      external_dns_hostname  = var.external_dns_hostname
-      admin_secret           = var.admin_existing_secret
-      admin_secret_key       = var.admin_existing_secret_key
-    })
-  ]
+  values = [ yamlencode(merge(local.base_values, local.cred_values)) ]
 }
 
 
-
-3) values.tftpl
-
-# --- Grafana base options ---
-replicas: 1
-
-%{ if admin_secret != "" }
-admin:
-  existingSecret: ${admin_secret}
-  existingSecretPasswordKey: ${admin_secret_key}
-%{ endif }
-
-service:
-  type: ClusterIP
-  port: 80
-
-# --- Ingress via AWS ALB ---
-ingress:
-  enabled: true
-  ingressClassName: alb
-  annotations:
-    alb.ingress.kubernetes.io/scheme: ${scheme}
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
-    alb.ingress.kubernetes.io/healthcheck-path: /login
-%{ if certificate_arn != "" }
-    alb.ingress.kubernetes.io/certificate-arn: ${certificate_arn}
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-%{ endif }
-%{ if external_dns_hostname != "" }
-    external-dns.alpha.kubernetes.io/hostname: ${external_dns_hostname}
-%{ endif }
-  hosts:
-    - ${host}
-  path: /
-  pathType: Prefix
-
-
-
-
-gha-eks-addons/quest-eks-addons/addons.tf
+addons.tf
 
 module "grafana" {
-  source = "./modules/grafana"
+  source                = "./modules/grafana"
 
-  namespace               = "monitoring"
-  grafana_chart_repo      = var.grafana_chart_repo
-  grafana_chart_version   = var.grafana_chart_version
+  namespace             = "monitoring"    # same ns as Prometheus (do NOT create again)
+  grafana_chart_repo    = var.grafana_chart_repo
+  grafana_chart_version = var.grafana_chart_version
 
-  host                    = var.grafana_host
-  alb_scheme              = var.grafana_alb_scheme           # "internal" by default
-  certificate_arn         = var.grafana_certificate_arn      # set to ACM ARN to enable HTTPS
-  external_dns_hostname   = var.grafana_external_dns_hostname # leave "" if not using ExternalDNS
+  host                  = var.grafana_host
+  alb_scheme            = var.grafana_alb_scheme
 
-  # Optional: only if you already created a secret with admin password
-  admin_existing_secret     = var.grafana_admin_existing_secret
-  admin_existing_secret_key = var.grafana_admin_existing_secret_key
+  # Optional (set if you want a known login now; else chart generates a random one)
+  admin_user            = "admin"
+  admin_password        = var.grafana_admin_password
+
+  # Prometheus in the same cluster/namespace
+  prometheus_url        = "http://kube-prometheus-stack-prometheus.monitoring:9090"
 }
 
 
 variables.tf
 
-
-variable "grafana_chart_repo" {
-  type        = string
-  description = "ECR OCI repo base, e.g. oci://<acct>.dkr.ecr.us-east-1.amazonaws.com"
-}
-
-variable "grafana_chart_version" {
-  type        = string
-  description = "Grafana chart version in ECR, e.g. 8.6.2"
-}
-
-variable "grafana_host" {
-  type        = string
-  description = "Hostname to expose Grafana, e.g. grafana.devops-tools.prd.aws.qdx.com"
-}
-
-variable "grafana_alb_scheme" {
-  type        = string
-  description = "ALB scheme: internal or internet-facing"
-  default     = "internal"
-}
-
-variable "grafana_certificate_arn" {
-  type        = string
-  description = "ACM cert ARN for HTTPS on ALB (leave empty for HTTP only)"
-  default     = ""
-}
-
-variable "grafana_external_dns_hostname" {
-  type        = string
-  description = "ExternalDNS hostname annotation (leave empty if not using ExternalDNS)"
-  default     = ""
-}
-
-variable "grafana_admin_existing_secret" {
-  type        = string
-  description = "Optional existing secret name with admin password (key set below)"
-  default     = ""
-}
-
-variable "grafana_admin_existing_secret_key" {
-  type        = string
-  description = "Key in the existing secret that contains admin password"
-  default     = "admin-password"
-}
+variable "grafana_chart_repo"        { type = string }
+variable "grafana_chart_version"     { type = string }
+variable "grafana_host"              { type = string }
+variable "grafana_alb_scheme"        { type = string  default = "internal" }
+variable "grafana_admin_password"    { type = string  default = "", sensitive = true }
 
 
 
-orion-prd.tfvars
+.tfvars
 
+grafana_chart_repo        = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
+grafana_chart_version     = "8.6.2"
+grafana_host              = "grafana.devops-tools.prd.aws.qdx.com"
+grafana_alb_scheme        = "internal"
 
-# Grafana Helm (from ECR)
-grafana_chart_repo    = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
-grafana_chart_version = "8.6.2"
-
-# ALB/Ingress
-grafana_host                   = "grafana.devops-tools.prd.aws.qdx.com"
-grafana_alb_scheme            = "internal"
-grafana_certificate_arn       = "arn:aws:acm:us-east-1:817786531545:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-grafana_external_dns_hostname = "grafana.devops-tools.prd.aws.qdx.com"
-
-# Optional admin password via existing secret (or leave blank to use chart defaults)
-grafana_admin_existing_secret      = ""
-grafana_admin_existing_secret_key  = "admin-password"
+# Optional for a predictable login (or pass via TF_VAR_… in Actions)
+# grafana_admin_password  = "Strong#Pass123"
 
