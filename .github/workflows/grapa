@@ -147,11 +147,35 @@ module "grafana" {
 
 variables.tf
 
-variable "grafana_chart_repo"        { type = string }
-variable "grafana_chart_version"     { type = string }
-variable "grafana_host"              { type = string }
-variable "grafana_alb_scheme"        { type = string  default = "internal" }
-variable "grafana_admin_password"    { type = string  default = "", sensitive = true }
+
+variable "grafana_chart_repo" {
+  type        = string
+  description = "OCI base for ECR, e.g. oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
+}
+
+variable "grafana_chart_version" {
+  type        = string
+  description = "Grafana Helm chart version (tag you pushed to ECR), e.g. 8.6.2"
+}
+
+variable "grafana_host" {
+  type        = string
+  description = "FQDN for Grafana, e.g. grafana.devops-tools.prd.aws.qdx.com"
+}
+
+variable "grafana_alb_scheme" {
+  type        = string
+  description = "ALB scheme: internal or internet-facing"
+  default     = "internal"
+}
+
+variable "grafana_admin_password" {
+  type        = string
+  description = "Optional admin password; leave empty to let the chart generate one"
+  default     = ""
+  sensitive   = true
+}
+
 
 
 
