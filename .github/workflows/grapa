@@ -1,0 +1,78 @@
+
+variable "namespace" {
+  description = "Namespace to deploy Grafana"
+  type        = string
+}
+
+variable "grafana_chart_repo" {
+  description = "OCI repo for Grafana chart"
+  type        = string
+}
+
+variable "grafana_chart_version" {
+  description = "Grafana chart version (tag in ECR)"
+  type        = string
+}
+
+variable "admin_user" {
+  description = "Grafana admin username"
+  type        = string
+  default     = "admin"
+}
+
+variable "admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
+}
+
+variable "prometheus_url" {
+  description = "URL of Prometheus service for datasource"
+  type        = string
+  default     = "http://kube-prometheus-stack-prometheus.monitoring:9090"
+}
+
+variable "create_namespace" {
+  description = "Create the namespace & PSS labels (false if another module already creates it)"
+  type        = bool
+  default     = false
+}
+
+# Ingress / ALB settings
+variable "ingress_enabled" {
+  type        = bool
+  default     = true
+}
+
+variable "ingress_host" {
+  description = "FQDN to expose Grafana (must exist/wildcard in your private hosted zone)"
+  type        = string
+}
+
+variable "alb_scheme" {
+  description = "internal | internet-facing"
+  type        = string
+  default     = "internal"
+}
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for HTTPS listener"
+  type        = string
+  default     = ""
+}
+
+variable "alb_group_name" {
+  description = "Optional ALB Ingress group.name to share one ALB"
+  type        = string
+  default     = "monitoring"
+}
+
+variable "alb_additional_annotations" {
+  description = "Any extra ALB annotations to merge"
+  type        = map(string)
+  default     = {}
+}
+
+
+
+
