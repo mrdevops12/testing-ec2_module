@@ -146,14 +146,51 @@ module "grafana" {
 variables.tf
 
 
-variable "grafana_chart_repo" { type = string }
-variable "grafana_chart_version" { type = string }
-variable "grafana_host" { type = string }
-variable "grafana_alb_scheme" { type = string  default = "internal" }
-variable "grafana_certificate_arn" { type = string default = "" }
-variable "grafana_external_dns_hostname" { type = string default = "" }
-variable "grafana_admin_existing_secret" { type = string default = "" }
-variable "grafana_admin_existing_secret_key" { type = string default = "admin-password" }
+variable "grafana_chart_repo" {
+  type        = string
+  description = "ECR OCI repo base, e.g. oci://<acct>.dkr.ecr.us-east-1.amazonaws.com"
+}
+
+variable "grafana_chart_version" {
+  type        = string
+  description = "Grafana chart version in ECR, e.g. 8.6.2"
+}
+
+variable "grafana_host" {
+  type        = string
+  description = "Hostname to expose Grafana, e.g. grafana.devops-tools.prd.aws.qdx.com"
+}
+
+variable "grafana_alb_scheme" {
+  type        = string
+  description = "ALB scheme: internal or internet-facing"
+  default     = "internal"
+}
+
+variable "grafana_certificate_arn" {
+  type        = string
+  description = "ACM cert ARN for HTTPS on ALB (leave empty for HTTP only)"
+  default     = ""
+}
+
+variable "grafana_external_dns_hostname" {
+  type        = string
+  description = "ExternalDNS hostname annotation (leave empty if not using ExternalDNS)"
+  default     = ""
+}
+
+variable "grafana_admin_existing_secret" {
+  type        = string
+  description = "Optional existing secret name with admin password (key set below)"
+  default     = ""
+}
+
+variable "grafana_admin_existing_secret_key" {
+  type        = string
+  description = "Key in the existing secret that contains admin password"
+  default     = "admin-password"
+}
+
 
 
 orion-prd.tfvars
