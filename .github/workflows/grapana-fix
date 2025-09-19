@@ -78,3 +78,53 @@ resource "helm_release" "grafana" {
     })
   ]
 }
+
+
+
+
+
+
+variable "namespace" {
+  description = "Namespace to deploy Grafana"
+  type        = string
+}
+
+variable "grafana_chart_repo" {
+  description = "OCI repo that hosts the Grafana chart (e.g. oci://<acct>.dkr.ecr.<region>.amazonaws.com)"
+  type        = string
+}
+
+variable "grafana_chart_version" {
+  description = "Grafana Helm chart version (tag), e.g. 8.6.2"
+  type        = string
+}
+
+variable "grafana_host" {
+  description = "DNS host users will hit (e.g. grafana.devops-tools.prd.aws.qdx.com)"
+  type        = string
+}
+
+variable "grafana_alb_scheme" {
+  description = "ALB scheme (internal | internet-facing)"
+  type        = string
+  default     = "internal"
+}
+
+variable "grafana_certificate_arn" {
+  description = "ACM cert ARN for TLS (optional). Leave empty for HTTP."
+  type        = string
+  default     = ""
+}
+
+variable "grafana_external_dns_hostname" {
+  description = "external-dns hostname to register (optional). Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
+variable "grafana_admin_password" {
+  description = "Optional admin password (leave empty to use chart default/secret)."
+  type        = string
+  default     = ""
+}
+
