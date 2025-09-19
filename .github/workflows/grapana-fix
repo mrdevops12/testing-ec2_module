@@ -128,3 +128,31 @@ variable "grafana_admin_password" {
   default     = ""
 }
 
+
+
+module "grafana" {
+  source = "./modules/grafana"
+
+  namespace             = "monitoring"  # same as Prometheus
+  grafana_chart_repo    = var.grafana_chart_repo
+  grafana_chart_version = var.grafana_chart_version
+  grafana_host          = var.grafana_host
+
+  # Optional (showing defaults)
+  grafana_alb_scheme            = "internal"
+  grafana_certificate_arn       = ""
+  grafana_external_dns_hostname = ""
+  grafana_admin_password        = var.grafana_admin_password
+}
+
+
+grafana_chart_repo     = "oci://817786531545.dkr.ecr.us-east-1.amazonaws.com"
+grafana_chart_version  = "8.6.2"
+grafana_host           = "grafana.devops-tools.prd.aws.qdx.com"
+
+# Optional (can add later)
+# grafana_admin_password        = "SuperSecret!"
+# grafana_certificate_arn       = "arn:aws:acm:us-east-1:...:certificate/..."
+# grafana_external_dns_hostname = "grafana.devops-tools.prd.aws.qdx.com"
+# grafana_alb_scheme            = "internal" # or "internet-facing"
+
