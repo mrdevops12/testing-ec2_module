@@ -1,0 +1,80 @@
+terraform {
+  required_version = ">= 1.3.2"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.75, < 6.0.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = ">= 2.7"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">= 2.20"
+    }
+    kubectl = {
+      source  = "alekc/kubectl"
+      version = ">= 2.0"
+    }
+  }
+}
+
+# Build ingress annotations with optional TLS & external-dns
+locals {
+  grafana_ingress_annotations = merge(
+    {
+      "kubernetes.io/ingress.class"           = "alb"
+      "alb.ingress.kubernetes.io/scheme"      = var.grafana_alb_scheme
+      "alb.ingress.kubernetes.io/target-type" = "ip"
+    },
+    var.grafana_certificate_arn != "" ? {
+      "alb.ingress.kubernetes.io/certificate-arn" = var.grafana_certificate_arn
+    } : {},
+    var.grafana_external_dns_hostname != "" ? {
+      "external-dns.alpha.kubernetes.io/hostname" = var.grafana_external_dns_hostname
+    } : {}
+  )
+}
+
+# We assume the 'monitoring' namespace already exists (created by the Prometheus module).
+# Keep create_namespace=false here.
+resource "helm_release" "grafana" {
+  name             = "grafana"
+  namespace        = var.namespace
+  repository       = var.grafana_chart_repo        # e.g. oci://123456789012.dkr.ecr.us-east-1.amazonaws.com
+  chart            = "actions/grafana/grafana"
+  version          = var.grafana_chart_version
+  create_namespace = false
+  atomic           = true
+
+  values = [
+    yamlencode({
+      # Optional: set admin password now, or leave blank to use the chart default / secret
+      adminPassword = var.grafana_admin_password != "" ? var.grafana_admin_password : null
+
+      # IMPORTANT: quote "grafana.ini" because it contains a dot
+      "grafana.ini" = {
+        server = {
+          domain   = var.grafana_host
+          root_url = "https://${var.grafana_host}"
+        }
+      }
+
+      # Use ALB Ingress; keep Service as ClusterIP
+      service = {
+        type = "ClusterIP"
+      }
+
+      ingress = {
+        enabled          = true
+        ingressClassName = "alb"
+        annotations      = local.grafana_ingress_annotations
+        hosts            = [var.grafana_host]
+        path             = "/"
+        pathType         = "Prefix"
+      }
+    })
+  ]
+}
