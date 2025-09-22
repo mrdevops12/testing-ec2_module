@@ -115,4 +115,8 @@ resource "helm_release" "prometheus_stack" {
 
 
 
+- name: Terraform Apply
+  run: terraform apply -input=false -no-color -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars" -auto-approve
+
+
 
