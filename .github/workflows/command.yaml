@@ -36,6 +36,26 @@ aws --version
 
 
 
+# 1) What PSS is enforced on the namespace?
+kubectl get ns monitoring -o jsonpath='{.metadata.labels}'; echo
+
+# You want to see:
+# "pod-security.kubernetes.io/enforce":"privileged"
+# (and optionally audit/warn also set to privileged)
+
+# 2) Did Helm roll back the release?
+helm -n monitoring list
+helm -n monitoring status kube-prometheus-stack || true
+
+# 3) Recent events – look for "forbidden" / "violates PodSecurity" messages
+kubectl -n monitoring get events --sort-by=.metadata.creationTimestamp | tail -n 200
+
+# 4) If any objects still exist, describe node-exporter
+kubectl -n monitoring describe ds -l app.kubernetes.io/name=node-exporter || true
+
+
+
+
 
 
 
