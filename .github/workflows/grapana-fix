@@ -196,3 +196,13 @@ YAML
 "alb.ingress.kubernetes.io/healthy-threshold-count"      = "2"
 "alb.ingress.kubernetes.io/unhealthy-threshold-count"    = "2"
 
+
+
+# Namespace you used (looks like "monitoring")
+NS=monitoring
+
+# Get the admin user and password from the secret created by the Grafana chart
+kubectl -n $NS get secret grafana -o jsonpath='{.data.admin-user}' | base64 -d; echo
+kubectl -n $NS get secret grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+
