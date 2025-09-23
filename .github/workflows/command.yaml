@@ -75,6 +75,30 @@ kubectl get crd -o custom-columns=NAME:.metadata.name | grep monitoring.coreos.c
 
 
 
+kubectl get servicemonitors,podmonitors,prometheusrules,probes,alertmanagers,prometheuses,thanosrulers,alertmanagerconfigs,scrapeconfigs -A
+
+kubectl delete servicemonitors,podmonitors,prometheusrules,probes,alertmanagers,prometheuses,thanosrulers,alertmanagerconfigs,scrapeconfigs -A --ignore-not-found
+
+
+
+# Delete only monitoring.coreos.com CRDs
+kubectl delete crd \
+  alertmanagers.monitoring.coreos.com \
+  alertmanagerconfigs.monitoring.coreos.com \
+  prometheuses.monitoring.coreos.com \
+  prometheusrules.monitoring.coreos.com \
+  servicemonitors.monitoring.coreos.com \
+  podmonitors.monitoring.coreos.com \
+  probes.monitoring.coreos.com \
+  scrapeconfigs.monitoring.coreos.com \
+  thanosrulers.monitoring.coreos.com
+
+kubectl get crd -o name | grep monitoring.coreos.com | xargs kubectl delete
+
+kubectl delete ns monitoring
+
+
+
 
 
 
