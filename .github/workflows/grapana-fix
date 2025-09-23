@@ -156,3 +156,24 @@ grafana_host           = "grafana.devops-tools.prd.aws.qdx.com"
 # grafana_external_dns_hostname = "grafana.devops-tools.prd.aws.qdx.com"
 # grafana_alb_scheme            = "internal" # or "internet-facing"
 
+
+
+
+resource "kubectl_manifest" "monitoring_namespace" {
+  yaml_body = <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${var.namespace}
+  labels:
+    kubernetes.io/metadata.name: ${var.namespace}
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/audit-version: v1.30
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: v1.30
+YAML
+}
+
+
