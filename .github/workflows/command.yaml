@@ -105,6 +105,20 @@ kubectl -n monitoring delete secret -l owner=helm,name=kube-prometheus-stack
 
 
 
+# modules/prometheus_stack/main.tf (helm_release "prometheus_stack")
+values = [
+  yamlencode({
+    grafana = {
+      enabled = false
+    }
+    # …your other values…
+  }),
+  file("${path.module}/arc-scrape-config.yaml")
+]
+
+
+
+
 
 
 
