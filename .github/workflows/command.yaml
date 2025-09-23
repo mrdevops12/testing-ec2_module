@@ -36,6 +36,18 @@ aws --version
 
 
 
+
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+helm version
+
+sudo yum install -y amazon-linux-extras
+sudo amazon-linux-extras enable epel
+sudo yum install -y helm
+
+
+
+
 # 1) What PSS is enforced on the namespace?
 kubectl get ns monitoring -o jsonpath='{.metadata.labels}'; echo
 
