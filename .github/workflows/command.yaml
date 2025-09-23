@@ -97,6 +97,13 @@ kubectl get crd -o name | grep monitoring.coreos.com | xargs kubectl delete
 
 kubectl delete ns monitoring
 
+# remove the Prometheus admission secret (safe)
+kubectl -n monitoring delete secret kube-prometheus-stack-admission
+
+# if any Helm history secrets for kube-prometheus-stack remain (none shown, but just in case):
+kubectl -n monitoring delete secret -l owner=helm,name=kube-prometheus-stack
+
+
 
 
 
