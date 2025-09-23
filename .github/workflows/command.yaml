@@ -118,6 +118,8 @@ values = [
 
 
 
+http://prometheus-kube-prometheus-stack-prometheus.monitoring.svc:9090
+
 
 
 
