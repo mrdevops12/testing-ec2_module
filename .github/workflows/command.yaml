@@ -67,6 +67,15 @@ kubectl -n monitoring describe ds -l app.kubernetes.io/name=node-exporter || tru
 
 
 
+kubectl delete secret -n monitoring -l "owner=helm,name=kube-prometheus-stack"
+
+kubectl get crd | grep monitoring.coreos.com
+# or, with column output:
+kubectl get crd -o custom-columns=NAME:.metadata.name | grep monitoring.coreos.com
+
+
+
+
 
 
 
