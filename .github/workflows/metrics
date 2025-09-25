@@ -272,6 +272,17 @@ curl -s "http://localhost:9090/api/v1/targets"
 
 
 
+curl -s http://localhost:9090/api/v1/targets \
+| tr '{},' '\n' | grep -E 'arc-(controller|listener)-metrics|health|scrapeUrl'
+
+
+curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_listeners)"
+curl -s "http://localhost:9090/api/v1/query?query=sum(gha_desired_runners)"
+curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners)"
+
+
+
+
 
 
 
