@@ -104,6 +104,15 @@ curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listene
 curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
 
 
+
+kubectl -n runner-controller describe svc arc-controller-metrics
+kubectl -n runner-controller describe svc arc-listener-metrics
+kubectl -n monitoring get servicemonitors --show-labels | grep arc
+curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listeners"
+curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
+
+
+
 curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listeners"
 curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
 
