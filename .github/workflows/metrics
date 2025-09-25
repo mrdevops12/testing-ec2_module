@@ -251,6 +251,11 @@ kubectl -n runner-controller patch svc arc-listener-metrics \
     "actions.github.com/scale-set-name":"aws-arc-ss-6f5bcf88"
   }}}'
 
+kubectl -n runner-controller patch svc arc-listener-metrics \
+  -p '{"spec":{"selector":{
+    "app.kubernetes.io/component":"runner-scale-set-listener",
+    "actions.github.com/scale-set-name":"aws-arc-ss"
+  }}}'
 
 
 
