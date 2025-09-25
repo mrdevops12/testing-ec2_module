@@ -237,6 +237,15 @@ kubectl -n runner-controller get pod $(kubectl -n runner-controller get pod -l a
 
 
 
+kubectl -n runner-controller patch svc arc-listener-metrics \
+  -p '{"spec":{"selector":{
+    "actions.github.com/scale-set-name":"aws-arc-ss",
+    "app.kubernetes.io/component":"runner-scale-set-listener"
+  }}}'
+
+
+
+
 
 
 
