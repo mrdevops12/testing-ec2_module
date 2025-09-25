@@ -153,5 +153,37 @@ curl -s "http://localhost:9090/api/v1/query?query=sum(gha_desired_runners)"
 curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners)"
 
 
+{"app.kubernetes.io/instance":"runner-controller",
+ "app.kubernetes.io/name":"gha-rs-controller",
+ "app.kubernetes.io/namespace":"runner-controller"}
+
+
+
+
+kubectl -n runner-controller patch svc arc-controller-metrics \
+  --type='json' \
+  -p='[{"op":"replace","path":"/spec/selector","value":
+{"app.kubernetes.io/instance":"runner-controller","app.kubernetes.io/name":"gha-rs-controller","app.kubernetes.io/namespace":"runner-controller"}}]'
+
+
+kubectl -n runner-controller describe svc arc-controller-metrics | grep -A2 Endpoints
+
+
+
+kubectl -n runner-controller get pod | grep listener
+# copy the pod name from the output:
+kubectl -n runner-controller get pod <YOUR-LISTENER-POD> -o jsonpath='{.metadata.labels}{"\n"}'
+
+kubectl -n runner-controller patch svc arc-listener-metrics \
+  --type='json' \
+  -p='[{"op":"replace","path":"/spec/selector","value": <PASTE_JSON_FROM_LISTENER_POD> }]'
+
+
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+
+
+
+
+
 
 
