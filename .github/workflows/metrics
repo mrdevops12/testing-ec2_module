@@ -209,6 +209,11 @@ curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners)"
 
 
 
+kubectl -n runner-controller get pod aws-arc-ss-6f5bcf88-listener -o jsonpath='{.metadata.labels}{"\n"}'
+
+
+
+
 
 
 
