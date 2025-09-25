@@ -228,6 +228,17 @@ curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_l
 
 
 
+# List the listener pod(s) with labels
+kubectl -n runner-controller get pod -l app.kubernetes.io/component=runner-scale-set-listener --show-labels
+
+# Also print the full label map of the pod you see
+kubectl -n runner-controller get pod $(kubectl -n runner-controller get pod -l app.kubernetes.io/component=runner-scale-set-listener -o name) \
+  -o jsonpath='{.metadata.labels}{"\n"}'
+
+
+
+
+
 
 
 
