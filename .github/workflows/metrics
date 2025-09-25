@@ -212,6 +212,21 @@ curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners)"
 kubectl -n runner-controller get pod aws-arc-ss-6f5bcf88-listener -o jsonpath='{.metadata.labels}{"\n"}'
 
 
+kubectl -n runner-controller patch svc arc-listener-metrics \
+  -p '{"spec":{"selector":{
+    "app.kubernetes.io/component":"runner-scale-set-listener",
+    "app.kubernetes.io/instance":"aws-arc-ss"
+  }}}'
+
+kubectl -n runner-controller describe svc arc-listener-metrics | grep -A2 Endpoints
+
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+curl -s "http://localhost:9090/api/v1/targets" | grep arc-listener-metrics -A3
+
+curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_listeners)"
+
+
+
 
 
 
