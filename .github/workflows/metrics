@@ -27,3 +27,47 @@ spec:
     - name: http-metrics
       port: 8080
       targetPort: 8080
+
+
+
+
+
+
+
+
+
+
+# arc-servicemonitors.yaml
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller-metrics
+  namespace: runner-controller
+  labels:
+    release: kube-prometheus-stack    # <-- change if your Prom release label differs
+spec:
+  selector:
+    matchLabels:
+      app: arc-controller
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-listener-metrics
+  namespace: runner-controller
+  labels:
+    release: kube-prometheus-stack    # <-- change if needed
+spec:
+  selector:
+    matchLabels:
+      app: arc-listener
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
