@@ -123,6 +123,18 @@ http://prometheus-kube-prometheus-stack-prometheus.monitoring.svc:9090
 
 
 
+# controller (namespace seems to be runner-controller in your screenshot)
+kubectl -n runner-controller port-forward deploy/runner-controller-gha-rs-controller 9091:8080 &
+curl -s localhost:9091/metrics | grep -E '^gha_|controller_runtime_' | head
+
+# listener (replace pod name)
+kubectl -n runner-controller port-forward pod/aws-arc-ss-...-listener 9090:8080 &
+curl -s localhost:9090/metrics | grep -E '^gha_|workqueue_' | head
+
+
+
+
+
 
 
 
