@@ -92,3 +92,15 @@ count(gha_controller_running_listeners)
 sum(gha_desired_runners)
 sum(gha_registered_runners)
 
+
+
+# See if Prometheus API is alive
+curl -s http://localhost:9090/-/healthy
+
+# List all targets (this will be JSON)
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health, endpoint: .scrapeUrl}'
+
+curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listeners"
+curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
+
+
