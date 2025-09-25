@@ -104,3 +104,8 @@ curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listene
 curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
 
 
+curl -s "http://localhost:9090/api/v1/query?query=gha_controller_running_listeners"
+curl -s "http://localhost:9090/api/v1/query?query=gha_desired_runners"
+
+
+
