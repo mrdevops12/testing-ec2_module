@@ -71,3 +71,9 @@ spec:
       path: /metrics
       interval: 30s
 
+
+
+
+
+kubectl apply -f arc-metrics-services.yaml
+kubectl apply -f arc-servicemonitors.yaml
