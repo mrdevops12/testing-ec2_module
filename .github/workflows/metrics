@@ -77,3 +77,18 @@ spec:
 
 kubectl apply -f arc-metrics-services.yaml
 kubectl apply -f arc-servicemonitors.yaml
+
+
+# See the ServiceMonitors
+kubectl -n runner-controller get servicemonitors
+
+# Check Prometheus targets are UP
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+# In your browser, open http://localhost:9090/targets and look for arc-controller-metrics and arc-listener-metrics (UP)
+
+# Quick queries (should return numbers, not empty):
+# In Prometheus or Grafana Explore:
+count(gha_controller_running_listeners)
+sum(gha_desired_runners)
+sum(gha_registered_runners)
+
