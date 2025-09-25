@@ -259,6 +259,13 @@ kubectl -n runner-controller patch svc arc-listener-metrics \
 
 
 
+kubectl -n runner-controller describe svc arc-listener-metrics | grep -A2 Endpoints
+# Expect an IP:8080, not <none>
+
+
+
+
+
 
 
 
