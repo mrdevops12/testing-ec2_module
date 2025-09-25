@@ -184,6 +184,34 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:909
 
 
 
+# PATCH the listener Service selector (copy–paste exactly)
+kubectl -n runner-controller patch svc arc-listener-metrics \
+  -p '{"spec":{"selector":{
+    "app.kubernetes.io/component":"runner-scale-set-listener",
+    "app.kubernetes.io/instance":"aws-arc-ss"
+  }}}'
+
+
+kubectl -n runner-controller describe svc arc-listener-metrics | grep -A2 Endpoints
+# Expect: Endpoints: <pod-ip>:8080   (not <none>)
+
+
+# (re)port-forward Prometheus if needed
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+
+# Targets should include arc-* and be UP
+curl -s http://localhost:9090/api/v1/targets | grep -E '"arc-(controller|listener)-metrics"|\"UP\"'
+
+# Test a few ARC metrics
+curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_listeners)"
+curl -s "http://localhost:9090/api/v1/query?query=sum(gha_desired_runners)"
+curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners)"
+
+
+
+
+
+
 
 
 
