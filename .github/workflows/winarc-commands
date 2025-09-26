@@ -1,0 +1,9 @@
+kubectl -n win-runner-controller apply -f win-arc-metrics-services.yaml
+kubectl -n win-runner-controller describe svc arc-controller-metrics | grep -A2 Endpoints
+kubectl -n win-runner-controller describe svc arc-listener-metrics   | grep -A2 Endpoints
+
+
+kubectl -n win-runner-controller get pod -l app.kubernetes.io/name=gha-rs-controller -o jsonpath='{.items[0].metadata.labels}'
+kubectl -n win-runner-controller get pod -l app.kubernetes.io/component=runner-scale-set-listener -o jsonpath='{.items[0].metadata.labels}'
+
+
