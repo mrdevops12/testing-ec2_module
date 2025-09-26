@@ -26,3 +26,4 @@ curl -s "http://localhost:9090/api/v1/query?query=sum(gha_desired_runners{namesp
 curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners{namespace=\"win-runner-controller\"})"
 curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_listeners{namespace=\"win-runner-controller\"})"
 
+/^(runner-set|win-runner-set)$/
