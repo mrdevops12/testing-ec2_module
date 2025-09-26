@@ -29,3 +29,52 @@ spec:
       targetPort: 8080
   selector:
     app.kubernetes.io/component: runner-scale-set-listener
+
+
+
+
+
+
+
+
+
+
+
+
+
+# win-arc-servicemonitors.yaml
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller-metrics-win
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [win-runner-controller]
+  selector:
+    matchLabels:
+      app: arc-controller
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-listener-metrics-win
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [win-runner-controller]
+  selector:
+    matchLabels:
+      app: arc-listener
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
