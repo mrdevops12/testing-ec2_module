@@ -1,0 +1,31 @@
+# win-arc-metrics-services.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-controller-metrics
+  labels:
+    app: arc-controller
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: gha-rs-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-listener-metrics
+  labels:
+    app: arc-listener
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/component: runner-scale-set-listener
