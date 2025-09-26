@@ -16,8 +16,10 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:909
 
 curl -s http://localhost:9090/api/v1/targets | jq -r '
   .data.activeTargets[]
-  | select(.labels.namespace=="win-runner-controller" and .labels.job|test("arc-(controller|listener)-metrics"))
+  | select(.labels.namespace=="win-runner-controller")
+  | select((.labels.job // "" | tostring) | test("arc-(controller|listener)-metrics"))
   | {job: .labels.job, ns: .labels.namespace, health: .health, url: .scrapeUrl}'
+
 
 
 curl -s "http://localhost:9090/api/v1/query?query=sum(gha_desired_runners{namespace=\"win-runner-controller\"})"
