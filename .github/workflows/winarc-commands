@@ -35,3 +35,12 @@ curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_l
 
 kubectl -n monitoring get servicemonitors | grep -E 'arc-(controller|listener)-metrics'
 
+# Show what namespaces each SM scrapes
+kubectl -n monitoring get servicemonitor arc-controller-metrics-win -o jsonpath='{.spec.namespaceSelector.matchNames}{"\n"}'
+kubectl -n monitoring get servicemonitor arc-listener-metrics-win   -o jsonpath='{.spec.namespaceSelector.matchNames}{"\n"}'
+
+# Also check the label selectors & endpoint port
+kubectl -n monitoring get servicemonitor arc-controller-metrics-win -o jsonpath='{.spec.selector.matchLabels}{"\n"}{.spec.endpoints[*].port}{"\n"}'
+kubectl -n monitoring get servicemonitor arc-listener-metrics-win   -o jsonpath='{.spec.selector.matchLabels}{"\n"}{.spec.endpoints[*].port}{"\n"}'
+
+
