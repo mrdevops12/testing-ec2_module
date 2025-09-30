@@ -44,3 +44,37 @@ kubectl -n monitoring get servicemonitor arc-controller-metrics-win -o jsonpath=
 kubectl -n monitoring get servicemonitor arc-listener-metrics-win   -o jsonpath='{.spec.selector.matchLabels}{"\n"}{.spec.endpoints[*].port}{"\n"}'
 
 
+
+
+
+
+
+# Add both namespaces to namespaceSelector.matchNames for controller metrics
+kubectl -n monitoring patch servicemonitor arc-controller-metrics-win \
+  --type='merge' \
+  -p '{"spec":{"namespaceSelector":{"matchNames":["runner-controller","win-runner-controller"]}}}'
+
+# Add both namespaces to namespaceSelector.matchNames for listener metrics
+kubectl -n monitoring patch servicemonitor arc-listener-metrics-win \
+  --type='merge' \
+  -p '{"spec":{"namespaceSelector":{"matchNames":["runner-controller","win-runner-controller"]}}}'
+
+
+
+
+
+kubectl -n monitoring get servicemonitor arc-controller-metrics-win \
+  -o jsonpath='{.spec.namespaceSelector.matchNames}{"\n"}'
+kubectl -n monitoring get servicemonitor arc-listener-metrics-win \
+  -o jsonpath='{.spec.namespaceSelector.matchNames}{"\n"}'
+
+
+
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+
+# Then on the same box:
+curl -s http://localhost:9090/api/v1/targets \
+| jq -r '.data.activeTargets[]
+  | select(.labels.job|test("arc-(controller|listener)-metrics"))
+  | "\(.labels.job)  ns=\(.labels.namespace)  health=\(.health)  url=\(.scrapeUrl)"'
+
