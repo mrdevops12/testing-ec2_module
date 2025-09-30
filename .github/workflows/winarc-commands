@@ -81,4 +81,8 @@ curl -s http://localhost:9090/api/v1/targets \
 
 label_values(gha_desired_runners, namespace)
 
+count by (namespace) (gha_desired_runners)
+
+
+
 
