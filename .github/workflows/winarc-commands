@@ -27,3 +27,11 @@ curl -s "http://localhost:9090/api/v1/query?query=sum(gha_registered_runners{nam
 curl -s "http://localhost:9090/api/v1/query?query=count(gha_controller_running_listeners{namespace=\"win-runner-controller\"})"
 
 /^(runner-set|win-runner-set)$/
+
+
+
+
+
+
+kubectl -n monitoring get servicemonitors | grep -E 'arc-(controller|listener)-metrics'
+
