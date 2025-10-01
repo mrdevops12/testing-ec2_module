@@ -84,5 +84,12 @@ label_values(gha_desired_runners, namespace)
 count by (namespace) (gha_desired_runners)
 
 
+label_values(kube_pod_info{namespace=~"runner-set|win-runner-set"}, namespace)
+
+
+count by (namespace) (kube_pod_info{namespace=~"runner-set|win-runner-set"})
+
+
+
 
 
