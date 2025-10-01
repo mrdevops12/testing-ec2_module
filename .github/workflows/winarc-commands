@@ -90,6 +90,26 @@ label_values(kube_pod_info{namespace=~"runner-set|win-runner-set"}, namespace)
 count by (namespace) (kube_pod_info{namespace=~"runner-set|win-runner-set"})
 
 
+-- Pending
+sum by (namespace) (gha_pending_runners{namespace=~"$RunnerNamespace"})
+
+-- Registered
+sum by (namespace) (gha_registered_runners{namespace=~"$RunnerNamespace"})
+
+-- Desired
+sum by (namespace) (gha_desired_runners{namespace=~"$RunnerNamespace"})
+
+-- Busy
+sum by (namespace) (gha_busy_runners{namespace=~"$RunnerNamespace"})
+
+-- Idle (if exposed)
+sum by (namespace) (gha_idle_runners{namespace=~"$RunnerNamespace"})
+
+-- Failed (if exposed)
+sum by (namespace) (gha_failed_runners{namespace=~"$RunnerNamespace"})
+
+
+
 
 
 
