@@ -92,6 +92,11 @@ count by (namespace) (kube_pod_info{namespace=~"runner-set|win-runner-set"})
 
 -- Pending
 sum by (namespace) (gha_pending_runners{namespace=~"$RunnerNamespace"})
+sum by (namespace) (gha_pending_runners{namespace=~"$RunnerNamespace"})
+
+sum by (namespace) (gha_desired_runners{namespace="runner-set"})
+
+
 
 -- Registered
 sum by (namespace) (gha_registered_runners{namespace=~"$RunnerNamespace"})
