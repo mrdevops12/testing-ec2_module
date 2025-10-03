@@ -233,3 +233,8 @@ kubectl -n monitoring get pods -l app.kubernetes.io/name=prometheus
 # Then delete that pod (it will restart and reload the config)
 kubectl -n monitoring delete pod <prometheus-pod-name>
 
+
+kubectl get pods -A -o wide \
+  --show-labels | grep -E 'runner-controller|win-runner-controller|arc|listener|controller'
+
+
