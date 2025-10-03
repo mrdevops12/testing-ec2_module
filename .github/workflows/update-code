@@ -240,4 +240,7 @@ kubectl get pods -A -o wide \
 
 label_values(gha_desired_runners, actions_github_com_scale_set_name)
 
+sum(gha_assigned_jobs{namespace="$RunnerNamespace", actions_github_com_scale_set_name="$scaleSet"})
+
+
 
