@@ -109,7 +109,7 @@ grafana_alb_scheme    = "internal"   # or "internet-facing"
 # New:
 prometheus_host       = "prometheus-orion.devops-tools.prd.aws.qdx.com"
 
-
+addon.tf
 
 
 module "prometheus_stack" {
@@ -127,3 +127,22 @@ module "prometheus_stack" {
 }
 
 
+root:
+
+
+variable "prometheus_host" {
+  description = "DNS host to expose Prometheus on (e.g., prometheus.example.com)"
+  type        = string
+}
+
+variable "prometheus_alb_scheme" {
+  description = "ALB scheme for Prometheus (internal | internet-facing)"
+  type        = string
+  default     = "internal"
+}
+
+variable "monitoring_alb_group" {
+  description = "ALB Ingress group name to place Grafana & Prometheus on the same ALB"
+  type        = string
+  default     = "monitoring"
+}
