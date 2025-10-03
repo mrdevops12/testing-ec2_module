@@ -109,3 +109,21 @@ grafana_alb_scheme    = "internal"   # or "internet-facing"
 # New:
 prometheus_host       = "prometheus-orion.devops-tools.prd.aws.qdx.com"
 
+
+
+
+module "prometheus_stack" {
+  source                   = "./modules/prometheus_stack"
+  namespace                = "monitoring"
+  prometheus_chart_repo    = var.prometheus_chart_repo
+  prometheus_chart_version = var.prometheus_chart_version
+
+  # ➜ REQUIRED (this is why validate failed)
+  prometheus_host          = var.prometheus_host
+
+  # (optional but useful if you want the same ALB behavior as Grafana)
+  prometheus_alb_scheme    = var.prometheus_alb_scheme        # "internal" | "internet-facing"
+  monitoring_alb_group     = var.monitoring_alb_group          # to share the same ALB as Grafana
+}
+
+
