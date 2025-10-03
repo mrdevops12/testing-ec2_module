@@ -153,3 +153,14 @@ variable "monitoring_alb_group" {
   default     = "monitoring"
 }
 
+
+
+# replace with your host
+curl -i http://grafana-orion.devops-tools.prd.aws.qdx.com/api/health
+
+kubectl -n monitoring get cm -l app.kubernetes.io/name=grafana -o yaml | sed -n '/grafana.ini/,+20p'
+
+kubectl -n monitoring describe ingress grafana
+
+nslookup grafana-orion.devops-tools.prd.aws.qdx.com
+nslookup prometheus-orion.devops-tools.prd.aws.qdx.com
