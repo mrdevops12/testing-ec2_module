@@ -198,3 +198,38 @@ prometheus:
 
 # If any ServiceMonitor/PodMonitor exists for ARC, remove it
 kubectl get servicemonitors,podmonitors -A | grep -E 'arc|runner|gha' || true
+
+
+
+
+kubectl get servicemonitors -A | grep -E 'arc|runner|listener|controller' || true
+
+kubectl -n runner-controller patch servicemonitor arc-controller-metrics \
+  --type merge -p '{"spec":{"namespaceSelector":{"matchNames":["runner-controller"]}}}'
+
+kubectl -n runner-controller patch servicemonitor arc-listener-metrics \
+  --type merge -p '{"spec":{"namespaceSelector":{"matchNames":["runner-controller"]}}}'
+
+kubectl -n monitoring patch servicemonitor arc-controller-metrics-win \
+  --type merge -p '{"spec":{"namespaceSelector":{"matchNames":["win-runner-controller"]}}}'
+
+kubectl -n monitoring patch servicemonitor arc-listener-metrics-win \
+  --type merge -p '{"spec":{"namespaceSelector":{"matchNames":["win-runner-controller"]}}}'
+
+
+
+echo "LINUX:"
+kubectl -n runner-controller get servicemonitor arc-controller-metrics -o jsonpath='{.spec.namespaceSelector}'; echo
+kubectl -n runner-controller get servicemonitor arc-listener-metrics   -o jsonpath='{.spec.namespaceSelector}'; echo
+
+echo "WINDOWS:"
+kubectl -n monitoring get servicemonitor arc-controller-metrics-win -o jsonpath='{.spec.namespaceSelector}'; echo
+kubectl -n monitoring get servicemonitor arc-listener-metrics-win   -o jsonpath='{.spec.namespaceSelector}'; echo
+
+
+
+# Find the Prometheus server pod (kube-prometheus-stack)
+kubectl -n monitoring get pods -l app.kubernetes.io/name=prometheus
+# Then delete that pod (it will restart and reload the config)
+kubectl -n monitoring delete pod <prometheus-pod-name>
+
