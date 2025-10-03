@@ -194,3 +194,7 @@ prometheus:
             regex: "([^:]+)(?::\\d+)?;(\\d+)"
             replacement: "$1:$2"
 
+
+
+# If any ServiceMonitor/PodMonitor exists for ARC, remove it
+kubectl get servicemonitors,podmonitors -A | grep -E 'arc|runner|gha' || true
