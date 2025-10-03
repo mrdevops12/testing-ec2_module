@@ -146,3 +146,10 @@ variable "monitoring_alb_group" {
   type        = string
   default     = "monitoring"
 }
+
+variable "monitoring_alb_group" {
+  description = "ALB Ingress group name to share the ALB with Prometheus"
+  type        = string
+  default     = "monitoring"
+}
+
