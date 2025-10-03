@@ -242,5 +242,10 @@ label_values(gha_desired_runners, actions_github_com_scale_set_name)
 
 sum(gha_assigned_jobs{namespace="$RunnerNamespace", actions_github_com_scale_set_name="$scaleSet"})
 
+rate(gha_job_startup_duration_seconds_sum{actions_github_com_scale_set_namespace="aws-arc-ss-12b9n", actions_github_com_scale_set_runner_namespace="runner-set"}[5m])
+/
+rate(gha_job_startup_duration_seconds_count{actions_github_com_scale_set_namespace="aws-arc-ss-12b9n", actions_github_com_scale_set_runner_namespace="runner-set"}[5m])
+
+
 
 
