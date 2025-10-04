@@ -249,3 +249,22 @@ rate(gha_job_startup_duration_seconds_count{actions_github_com_scale_set_namespa
 
 
 This is expected in Prometheus. Each target shows up once per scrape configuration. If the same pod matches multiple ServiceMonitors, you’ll see it listed more than once. It isn’t a bug — it just means Prometheus is scraping the same pod endpoint under different jobs or selector
+
+
+
+
+I wanted to clarify the repeated endpoints you're seeing in the Prometheus Targets view. While some IPs and ports may appear similar, these are not duplicates—they’re distinct targets differentiated by their labels, jobs, and scrape configurations.
+
+Prometheus treats each target as unique based on metadata such as:
+
+job name (e.g., arc-controller-metrics, github-arc)
+
+instance and namespace
+
+Container role (e.g., alertmanager, config-reloader)
+
+This design allows us to monitor the same service from multiple perspectives, support multi-tenant setups, and tailor dashboards and alerts to specific roles or environments.
+
+
+http://10.64.46.4:9093/metrics	kube-prometheus-stack-alertmanager	monitoring	alertmanager	UP
+http://10.64.46.4:8080/metrics	kube-prometheus-stack-alertmanager	monitoring	config-reloader
