@@ -248,4 +248,4 @@ rate(gha_job_startup_duration_seconds_count{actions_github_com_scale_set_namespa
 
 
 
-
+This is expected in Prometheus. Each target shows up once per scrape configuration. If the same pod matches multiple ServiceMonitors, you’ll see it listed more than once. It isn’t a bug — it just means Prometheus is scraping the same pod endpoint under different jobs or selector
