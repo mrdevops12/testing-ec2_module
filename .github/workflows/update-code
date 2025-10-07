@@ -268,3 +268,36 @@ This design allows us to monitor the same service from multiple perspectives, su
 
 http://10.64.46.4:9093/metrics	kube-prometheus-stack-alertmanager	monitoring	alertmanager	UP
 http://10.64.46.4:8080/metrics	kube-prometheus-stack-alertmanager	monitoring	config-reloader
+
+
+
+
+
+helm ls -n monitoring
+helm uninstall grafana -n monitoring
+# Kill any grafana Deploy/STS/Svc/Ingress left behind
+kubectl delete deploy,sts,svc,ing -n monitoring -l app.kubernetes.io/name=grafana --ignore-not-found
+
+# Delete PVCs so the old EBS volumes don’t linger
+kubectl delete pvc -n monitoring -l app.kubernetes.io/name=grafana --ignore-not-found
+
+# If your StorageClass uses Retain, you may also need to delete PVs (careful!)
+kubectl get pv | awk '/grafana/ {print $1}' | xargs -r kubectl delete pv
+
+# Remove Helm history secrets for the old grafana release (you have sh.helm.release.* in your screenshot)
+kubectl delete secret -n monitoring -l owner=helm,name=grafana --ignore-not-found
+
+# Any leftover configmaps, roles, serviceaccounts, etc.
+kubectl delete cm,sa,role,rolebinding -n monitoring -l app.kubernetes.io/name=grafana --ignore-not-found
+
+
+
+# Should return nothing
+kubectl get all -n monitoring -l app.kubernetes.io/name=grafana
+kubectl get pvc -n monitoring -l app.kubernetes.io/name=grafana
+kubectl get secret -n monitoring -l owner=helm,name=grafana
+
+# Helm should now show only your kube-prometheus-stack (and other non-grafana releases)
+helm ls -n monitoring
+
+
