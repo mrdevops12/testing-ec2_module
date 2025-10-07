@@ -79,3 +79,15 @@ values = [
   }),
   file("${path.module}/arc-scrape-config.yaml"),
 ]
+
+
+
+
+variable "grafana_host" {
+  description = "DNS host to expose Grafana (e.g., grafana.example.com)"
+  type        = string
+}
+
+grafana_host    = "grafana-orion.devops-tools.prd.aws.qdx.com"
+# prometheus_host is already present in your file
+# prometheus_alb_scheme uses module default (looks like "internal" in your vars.tf)
