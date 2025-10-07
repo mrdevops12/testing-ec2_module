@@ -121,3 +121,26 @@ kubectl -n $NS scale deploy kube-prometheus-stack-grafana --replicas=0 || true
 kubectl -n $NS get pods -w
 
 
+
+
+# list PVCs so we use exact names
+kubectl -n $NS get pvc
+
+# example names (adjust to your output):
+PROM_PVC=prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+AM_PVC=alertmanager-kube-prometheus-stack-alertmanager-db-alertmanager-kube-prometheus-stack-alertmanager-0
+GRAFANA_PVC=kube-prometheus-stack-grafana
+
+# remove pvc-protection finalizer just in case it blocks deletion
+kubectl -n $NS patch pvc $PROM_PVC   --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+kubectl -n $NS patch pvc $AM_PVC     --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+kubectl -n $NS patch pvc $GRAFANA_PVC --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+
+# delete the PVCs
+kubectl -n $NS delete pvc $PROM_PVC --ignore-not-found
+kubectl -n $NS delete pvc $AM_PVC   --ignore-not-found
+kubectl -n $NS delete pvc $GRAFANA_PVC --ignore-not-found
+
+
+
+
