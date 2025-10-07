@@ -154,5 +154,13 @@ kubectl -n $NS get pvc -w
 
 
 
+# make sure workloads are not scaled to 0 from earlier steps
+kubectl -n monitoring patch prometheus   kube-prometheus-stack-prometheus   --type=merge -p '{"spec":{"replicas":1}}' || true
+kubectl -n monitoring patch alertmanager kube-prometheus-stack-alertmanager --type=merge -p '{"spec":{"replicas":1}}' || true
+kubectl -n monitoring scale deploy kube-prometheus-stack-grafana --replicas=1 || true
+
+
+
+
 
 
