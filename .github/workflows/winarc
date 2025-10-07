@@ -177,5 +177,22 @@ terraform state rm module.prometheus_stack.helm_release.prometheus_stack
 
 
 
+NS=monitoring
+REL=kube-prometheus-stack
+
+# 1) find the last *deployed* revision
+REV=$(helm -n "$NS" history "$REL" | awk '/deployed/{rev=$1} END{print rev}')
+
+# 2) rollback to that good revision (this clears the pending state)
+helm -n "$NS" rollback "$REL" "$REV"
+
+# (optional) confirm it's healthy
+helm -n "$NS" status "$REL"
+kubectl -n "$NS" get pods,pvc,ing -o wide
+
+
+
+
+
 
 
