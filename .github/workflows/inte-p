@@ -3,9 +3,10 @@ values = [
     grafana = {
       enabled     = true
       persistence = {
-        enabled = true
-        size    = "10Gi"
-        type    = "pvc"
+        enabled          = true
+        size             = "10Gi"
+        type             = "pvc"
+        storageClassName = "gp3"       # <— add
       }
       ingress = {
         enabled          = true
@@ -49,7 +50,8 @@ values = [
         storageSpec = {
           volumeClaimTemplate = {
             spec = {
-              accessModes = ["ReadWriteOnce"]
+              accessModes      = ["ReadWriteOnce"]
+              storageClassName = "gp3"    # <— add
               resources = {
                 requests = { storage = "10Gi" }
               }
@@ -67,7 +69,8 @@ values = [
         storage = {
           volumeClaimTemplate = {
             spec = {
-              accessModes = ["ReadWriteOnce"]
+              accessModes      = ["ReadWriteOnce"]
+              storageClassName = "gp3"    # <— add
               resources = {
                 requests = { storage = "10Gi" }
               }
@@ -79,15 +82,3 @@ values = [
   }),
   file("${path.module}/arc-scrape-config.yaml"),
 ]
-
-
-
-
-variable "grafana_host" {
-  description = "DNS host to expose Grafana (e.g., grafana.example.com)"
-  type        = string
-}
-
-grafana_host    = "grafana-orion.devops-tools.prd.aws.qdx.com"
-# prometheus_host is already present in your file
-# prometheus_alb_scheme uses module default (looks like "internal" in your vars.tf)
