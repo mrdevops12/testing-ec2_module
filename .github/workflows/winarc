@@ -162,5 +162,20 @@ kubectl -n monitoring scale deploy kube-prometheus-stack-grafana --replicas=1 ||
 
 
 
+helm -n monitoring status kube-prometheus-stack
+helm -n monitoring history kube-prometheus-stack
+
+# pick the last number in the "STATUS  deployed" row
+REV=$(helm -n monitoring history kube-prometheus-stack | awk '/deployed/{rev=$1} END{print rev}')
+helm -n monitoring rollback kube-prometheus-stack ${REV}
+
+
+helm -n monitoring uninstall kube-prometheus-stack
+# if Terraform still thinks it exists, drop it from state once:
+terraform state rm module.prometheus_stack.helm_release.prometheus_stack
+
+
+
+
 
 
