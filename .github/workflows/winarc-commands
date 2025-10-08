@@ -283,3 +283,17 @@ spec:
 
 
 
+# listeners exposed by the ARC controller
+gha_controller_running_listeners
+
+# same, scoped to a namespace
+gha_controller_running_listeners{namespace=~"runner-controller|win-runner-controller"}
+
+# runners / jobs metrics
+sum(gha_desired_runners)                   # desired
+sum(gha_registered_runners)               # registered
+sum(gha_idle_runners)                     # idle
+sum(gha_running_jobs)                     # currently running jobs
+
+
+
