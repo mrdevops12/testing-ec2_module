@@ -296,4 +296,8 @@ sum(gha_idle_runners)                     # idle
 sum(gha_running_jobs)                     # currently running jobs
 
 
+actions_github_com_scale_set_name
+exported_namespace =~ $SystemNamespace
+
+
 
