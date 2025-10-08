@@ -118,3 +118,13 @@ sum by (namespace) (gha_failed_runners{namespace=~"$RunnerNamespace"})
 
 
 
+kubectl -n arc-systems get svc -l app.kubernetes.io/name=actions-runner-controller -o wide
+kubectl -n monitoring get deploy kube-prometheus-stack-kube-state-metrics
+kubectl -n monitoring get servicemonitor | grep kube-state
+
+
+
+
+
+
+
