@@ -124,6 +124,90 @@ kubectl -n monitoring get servicemonitor | grep kube-state
 
 
 
+# Linux controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-controller-metrics
+  namespace: runner-controller
+  labels:
+    app.kubernetes.io/name: actions-runner-controller
+    app.kubernetes.io/component: controller-manager
+spec:
+  selector:
+    app.kubernetes.io/name: actions-runner-controller
+    app.kubernetes.io/component: controller-manager
+  ports:
+    - name: metrics
+      port: 8443
+      targetPort: 8443
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller-metrics
+  namespace: runner-controller
+  labels:
+    release: kube-prometheus-stack   # must match your Prometheus Helm release label
+spec:
+  namespaceSelector:
+    matchNames: ["runner-controller"]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: actions-runner-controller
+      app.kubernetes.io/component: controller-manager
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+
+# Windows controller (if you run it)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-controller-metrics
+  namespace: win-runner-controller
+  labels:
+    app.kubernetes.io/name: actions-runner-controller
+    app.kubernetes.io/component: controller-manager
+spec:
+  selector:
+    app.kubernetes.io/name: actions-runner-controller
+    app.kubernetes.io/component: controller-manager
+  ports:
+    - name: metrics
+      port: 8443
+      targetPort: 8443
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller-metrics
+  namespace: win-runner-controller
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["win-runner-controller"]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: actions-runner-controller
+      app.kubernetes.io/component: controller-manager
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+
+
+
 
 
 
