@@ -212,3 +212,74 @@ spec:
 
 
 
+
+
+# SVC: ARC controller metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-controller-metrics
+  namespace: runner-controller
+  labels:
+    app: arc-controller
+spec:
+  selector:
+    app.kubernetes.io/name: actions-runner-controller
+  ports:
+  - name: http-metrics
+    port: 8080
+    targetPort: 8080
+---
+# SVC: ARC listener metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-listener-metrics
+  namespace: runner-controller
+  labels:
+    app: arc-listener
+spec:
+  selector:
+    app.kubernetes.io/name: gha-runner-scale-set-listener
+  ports:
+  - name: http-metrics
+    port: 8080
+    targetPort: 8080
+---
+# SM: scrape controller
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller-metrics
+  namespace: runner-controller
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: arc-controller
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+    interval: 30s
+---
+# SM: scrape listener
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-listener-metrics
+  namespace: runner-controller
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: arc-listener
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+    interval: 30s
+
+
+
+
