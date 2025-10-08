@@ -300,4 +300,11 @@ actions_github_com_scale_set_name
 exported_namespace =~ $SystemNamespace
 
 
+label_values(
+  gha_desired_runners{exported_namespace=~"$SystemNamespace"},
+  actions_github_com_scale_set_name
+)
+
+
+
 
