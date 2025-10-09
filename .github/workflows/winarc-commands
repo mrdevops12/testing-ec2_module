@@ -338,3 +338,14 @@ sum by (le) (
   )
 )
 
+
+sum by (le) (
+  rate(
+    gha_job_startup_duration_seconds_bucket{
+      exported_namespace="runner-set",
+      actions_github_com_scale_set_name=~"(runner-set|win-runner-set)"
+    }[5m]
+  )
+)
+
+
