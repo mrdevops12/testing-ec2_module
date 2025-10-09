@@ -360,3 +360,27 @@ sum by (le) (
     }[$__range]
   )
 )
+
+
+
+
+
+
+sum by (le) (
+  increase(
+    gha_job_startup_duration_seconds_bucket{
+      actions_github_com_scale_set_name=~"$Scaleset",
+      namespace=~"$RunnerNamespace"
+    }[$__range]
+  )
+)
++
+sum by (le) (
+  increase(
+    gha_job_startup_duration_seconds_bucket{
+      actions_github_com_scale_set_name=~"$Scaleset",
+      exported_namespace=~"$RunnerNamespace"
+    }[$__range]
+  )
+)
+
