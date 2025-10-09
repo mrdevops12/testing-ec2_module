@@ -322,4 +322,7 @@ histogram_quantile(
   )
 )
 
+sum by (le) (
+  increase(gha_job_startup_duration_seconds_bucket[24h])
+)
 
