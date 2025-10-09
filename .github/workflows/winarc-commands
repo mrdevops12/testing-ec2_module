@@ -352,3 +352,11 @@ sum by (le) (
   increase(gha_job_startup_duration_seconds_bucket[$__range])
 )
 
+sum by (le) (
+  increase(
+    gha_job_startup_duration_seconds_bucket{
+      exported_namespace=~"$RunnerNamespace",
+      actions_github_com_scale_set_name=~"$Scaleset"
+    }[$__range]
+  )
+)
