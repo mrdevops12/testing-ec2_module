@@ -308,3 +308,18 @@ label_values(
 
 
 
+
+
+histogram_quantile(
+  0.5,
+  sum by (le) (
+    rate(
+      gha_job_startup_duration_seconds_bucket{
+        actions_github_com_scale_set_name=~"$Scaleset",
+        namespace=~"$RunnerNamespace"
+      }[$__rate_interval]
+    )
+  )
+)
+
+
