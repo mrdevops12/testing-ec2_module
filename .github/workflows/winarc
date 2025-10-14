@@ -592,3 +592,16 @@ variable "monitoring_zones" {
   type        = list(string)
   default     = ["us-east-1a"]   # <-- change to your real zone(s)
 }
+
+
+
+
+# 1) Find the last 'deployed' revision number
+helm -n monitoring history kube-prometheus-stack
+
+# 2) Roll back to that revision (replace <N> with the last DEPLOYED rev)
+helm -n monitoring rollback kube-prometheus-stack <N>
+
+# 3) Try your deploy again
+terraform apply
+
