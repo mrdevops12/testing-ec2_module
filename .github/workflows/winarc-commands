@@ -390,3 +390,38 @@ sum by (le) (
 )
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+kubectl get pvc -n monitoring
+kubectl describe pod -n monitoring prometheus-kube-prometheus-stack-prometheus-0 | grep -A3 Volumes
+# should show EmptyDir, not a claimName
+
+
+
+kubectl delete pvc -n monitoring \
+  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+
+
+kubectl patch pvc -n monitoring \
+  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0 \
+  --type=merge -p '{"metadata":{"finalizers":null}}'
+kubectl delete pvc -n monitoring \
+  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+
+kubectl get pv | grep prometheus
+kubectl describe pv <pv-name> | grep -i reclaim
+
+
+
+
