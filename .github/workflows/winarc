@@ -576,3 +576,19 @@ resource "helm_release" "prometheus_stack" {
   depends_on = [kubectl_manifest.monitoring_namespace]
 }
 
+
+
+
+
+
+monitoring_zones         = ["us-east-1a"]
+
+
+kubectl get nodes -o wide -L topology.kubernetes.io/zone
+
+
+variable "monitoring_zones" {
+  description = "Allowed AZs for monitoring pods (must match node zones)"
+  type        = list(string)
+  default     = ["us-east-1a"]   # <-- change to your real zone(s)
+}
