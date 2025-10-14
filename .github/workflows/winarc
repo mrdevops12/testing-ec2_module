@@ -377,3 +377,202 @@ variable "grafana_storage_size" {
   alertmanager_storage_size  = var.alertmanager_storage_size
   grafana_storage_class      = var.grafana_storage_class
   grafana_storage_size       = var.grafana_storage_size
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+resource "kubectl_manifest" "monitoring_namespace" {
+  yaml_body = <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${var.namespace}
+  labels:
+    kubernetes.io/metadata.name: ${var.namespace}
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/audit-version: v1.30
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: v1.30
+YAML
+}
+
+resource "helm_release" "prometheus_stack" {
+  name             = "kube-prometheus-stack"
+  namespace        = var.namespace
+  create_namespace = false
+  repository       = var.prometheus_chart_repo
+  chart            = "actions/prometheus/kube-prometheus-stack"
+  version          = var.prometheus_chart_version
+  atomic           = true
+  wait             = true
+  wait_for_jobs    = true
+  timeout          = 1200
+  disable_openapi_validation = true
+
+  values = [
+    yamlencode({
+      grafana = {
+        enabled = true
+
+        # ---- persistence (EBS gp3) ----
+        persistence = {
+          enabled          = true
+          type             = "statefulset"
+          storageClassName = var.grafana_storage_class
+          accessModes      = ["ReadWriteOnce"]
+          size             = var.grafana_storage_size
+        }
+
+        # ---- AZ pinning ----
+        affinity = {
+          nodeAffinity = {
+            requiredDuringSchedulingIgnoredDuringExecution = {
+              nodeSelectorTerms = [{
+                matchExpressions = [{
+                  key      = "topology.kubernetes.io/zone"
+                  operator = "In"
+                  values   = var.monitoring_zones
+                }]
+              }]
+            }
+          }
+        }
+
+        # ---- your ingress (unchanged, just inlined) ----
+        ingress = {
+          enabled          = true
+          ingressClassName = "alb"
+          annotations = {
+            "kubernetes.io/ingress.class"               = "alb"
+            "alb.ingress.kubernetes.io/scheme"          = var.prometheus_alb_scheme
+            "alb.ingress.kubernetes.io/target-type"     = "ip"
+            "alb.ingress.kubernetes.io/healthcheck-path"= "/login"
+            "alb.ingress.kubernetes.io/success-codes"   = "200-399"
+            "alb.ingress.kubernetes.io/healthcheck-port"= "traffic-port"
+            "alb.ingress.kubernetes.io/group.name"      = var.monitoring_alb_group
+            "alb.ingress.kubernetes.io/group.order"     = "20"
+          }
+          hosts    = [var.grafana_host]
+          paths    = ["/"]
+          pathType = "Prefix"
+        }
+      }
+
+      prometheus = {
+        # ---- your ingress (unchanged, just inlined) ----
+        ingress = {
+          enabled          = true
+          ingressClassName = "alb"
+          annotations = {
+            "kubernetes.io/ingress.class"               = "alb"
+            "alb.ingress.kubernetes.io/scheme"          = var.prometheus_alb_scheme
+            "alb.ingress.kubernetes.io/target-type"     = "ip"
+            "alb.ingress.kubernetes.io/healthcheck-path"= "/-/healthy"
+            "alb.ingress.kubernetes.io/success-codes"   = "200"
+            "alb.ingress.kubernetes.io/healthcheck-port"= "traffic-port"
+            "alb.ingress.kubernetes.io/group.name"      = var.monitoring_alb_group
+            "alb.ingress.kubernetes.io/group.order"     = "20"
+          }
+          hosts    = [var.prometheus_host]
+          paths    = ["/"]
+          pathType = "Prefix"
+        }
+
+        prometheusSpec = {
+          retention      = var.prometheus_retention
+          walCompression = true
+
+          # ---- AZ pinning ----
+          affinity = {
+            nodeAffinity = {
+              requiredDuringSchedulingIgnoredDuringExecution = {
+                nodeSelectorTerms = [{
+                  matchExpressions = [{
+                    key      = "topology.kubernetes.io/zone"
+                    operator = "In"
+                    values   = var.monitoring_zones
+                  }]
+                }]
+              }
+            }
+          }
+
+          # ---- persistence (EBS gp3) ----
+          storageSpec = {
+            volumeClaimTemplate = {
+              spec = {
+                storageClassName = var.prometheus_storage_class
+                accessModes      = ["ReadWriteOnce"]
+                resources        = { requests = { storage = var.prometheus_storage_size } }
+              }
+            }
+          }
+        }
+      }
+
+      alertmanager = {
+        enabled = true
+        ingress = { enabled = false }
+
+        alertmanagerSpec = {
+          # ---- AZ pinning ----
+          affinity = {
+            nodeAffinity = {
+              requiredDuringSchedulingIgnoredDuringExecution = {
+                nodeSelectorTerms = [{
+                  matchExpressions = [{
+                    key      = "topology.kubernetes.io/zone"
+                    operator = "In"
+                    values   = var.monitoring_zones
+                  }]
+                }]
+              }
+            }
+          }
+
+          # ---- persistence (EBS gp3) ----
+          storage = {
+            volumeClaimTemplate = {
+              spec = {
+                storageClassName = var.alertmanager_storage_class
+                accessModes      = ["ReadWriteOnce"]
+                resources        = { requests = { storage = var.alertmanager_storage_size } }
+              }
+            }
+          }
+        }
+      }
+    }),
+    file("${path.module}/arc-scrape-config.yaml"),
+  ]
+
+  depends_on = [kubectl_manifest.monitoring_namespace]
+}
+
