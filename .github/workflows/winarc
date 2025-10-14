@@ -314,3 +314,56 @@ values = [
   file("${path.module}/arc-scrape-config.yaml"),
 ]
 
+
+
+
+
+
+
+
+
+
+
+# variables.tf
+
+variable "prometheus_storage_class" {
+  description = "StorageClass for Prometheus PVC (EBS CSI)."
+  type        = string
+  default     = "gp3"
+}
+
+variable "prometheus_storage_size" {
+  description = "Prometheus PVC size."
+  type        = string
+  default     = "50Gi"
+}
+
+variable "prometheus_retention" {
+  description = "Prometheus time series retention period."
+  type        = string
+  default     = "15d"
+}
+
+variable "alertmanager_storage_class" {
+  description = "StorageClass for Alertmanager PVC (EBS CSI)."
+  type        = string
+  default     = "gp3"
+}
+
+variable "alertmanager_storage_size" {
+  description = "Alertmanager PVC size."
+  type        = string
+  default     = "10Gi"
+}
+
+variable "grafana_storage_class" {
+  description = "StorageClass for Grafana PVC (EBS CSI)."
+  type        = string
+  default     = "gp3"
+}
+
+variable "grafana_storage_size" {
+  description = "Grafana PVC size."
+  type        = string
+  default     = "10Gi"
+}
