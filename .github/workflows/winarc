@@ -367,3 +367,13 @@ variable "grafana_storage_size" {
   type        = string
   default     = "10Gi"
 }
+
+
+
+ prometheus_storage_class   = var.prometheus_storage_class
+  prometheus_storage_size    = var.prometheus_storage_size
+  prometheus_retention       = var.prometheus_retention
+  alertmanager_storage_class = var.alertmanager_storage_class
+  alertmanager_storage_size  = var.alertmanager_storage_size
+  grafana_storage_class      = var.grafana_storage_class
+  grafana_storage_size       = var.grafana_storage_size
