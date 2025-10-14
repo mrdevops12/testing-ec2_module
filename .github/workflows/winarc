@@ -203,3 +203,114 @@ kubectl -n monitoring get secret kube-prometheus-stack-grafana \
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+values = [
+  yamlencode({
+    grafana = {
+      enabled = true
+      # Persist Grafana (users, dashboards edited in UI, plugins)
+      persistence = {
+        enabled          = true
+        type             = "statefulset"
+        storageClassName = var.grafana_storage_class
+        accessModes      = ["ReadWriteOnce"]
+        size             = var.grafana_storage_size
+      }
+      ingress = {
+        enabled = true
+        ingressClassName = "alb"
+        annotations = {
+          "kubernetes.io/ingress.class"              = "alb"
+          "alb.ingress.kubernetes.io/scheme"         = var.prometheus_alb_scheme
+          "alb.ingress.kubernetes.io/target-type"    = "ip"
+          "alb.ingress.kubernetes.io/healthcheck-path" = "/login"
+          "alb.ingress.kubernetes.io/success-codes"  = "200-399"
+          "alb.ingress.kubernetes.io/healthcheck-port" = "traffic-port"
+          "alb.ingress.kubernetes.io/group.name"     = var.monitoring_alb_group
+          "alb.ingress.kubernetes.io/group.order"    = "20"
+        }
+        hosts    = [var.grafana_host]
+        paths    = ["/"]
+        pathType = "Prefix"
+      }
+    }
+
+    prometheus = {
+      ingress = {
+        enabled = true
+        ingressClassName = "alb"
+        annotations = {
+          "kubernetes.io/ingress.class"              = "alb"
+          "alb.ingress.kubernetes.io/scheme"         = var.prometheus_alb_scheme
+          "alb.ingress.kubernetes.io/target-type"    = "ip"
+          "alb.ingress.kubernetes.io/healthcheck-path" = "/-/healthy"
+          "alb.ingress.kubernetes.io/success-codes"  = "200"
+          "alb.ingress.kubernetes.io/healthcheck-port" = "traffic-port"
+          "alb.ingress.kubernetes.io/group.name"     = var.monitoring_alb_group
+          "alb.ingress.kubernetes.io/group.order"    = "20"
+        }
+        hosts    = [var.prometheus_host]
+        paths    = ["/"]
+        pathType = "Prefix"
+      }
+
+      # Persist Prometheus TSDB
+      prometheusSpec = {
+        retention      = var.prometheus_retention
+        walCompression = true
+        storageSpec = {
+          volumeClaimTemplate = {
+            spec = {
+              storageClassName = var.prometheus_storage_class
+              accessModes      = ["ReadWriteOnce"]
+              resources = { requests = { storage = var.prometheus_storage_size } }
+            }
+          }
+        }
+      }
+    }
+
+    alertmanager = {
+      enabled = true
+      ingress = { enabled = false }
+
+      # Persist Alertmanager state (silences/notifications)
+      alertmanagerSpec = {
+        storage = {
+          volumeClaimTemplate = {
+            spec = {
+              storageClassName = var.alertmanager_storage_class
+              accessModes      = ["ReadWriteOnce"]
+              resources = { requests = { storage = var.alertmanager_storage_size } }
+            }
+          }
+        }
+      }
+    }
+  }),
+  file("${path.module}/arc-scrape-config.yaml"),
+]
+
