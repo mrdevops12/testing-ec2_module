@@ -655,6 +655,17 @@ kubectl -n monitoring describe pod -l app.kubernetes.io/name=grafana | sed -n '/
 kubectl -n monitoring describe pod -l app.kubernetes.io/name=alertmanager | sed -n '/Volumes:/,/Events:/p'
 
 
+# set your namespaces if different
+ARC_NS=runner-controller
+MON_NS=monitoring
+
+# 1) Does the metrics Service exist and point to pods?
+kubectl -n $ARC_NS get svc arc-controller-metrics -o wide
+kubectl -n $ARC_NS get endpoints arc-controller-metrics -o wide
+
+# 2) Confirm the controller pod exposes the same port (usually 8080)
+kubectl -n $ARC_NS get pods -l app.kubernetes.io/name=actions-runner-controller
+kubectl -n $ARC_NS describe pod -l app.kubernetes.io/name=actions-runner-controller | grep -A2 -n "Port:"
 
 
 
