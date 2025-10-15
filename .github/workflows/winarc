@@ -648,3 +648,14 @@ kubectl -n monitoring describe pod -l app.kubernetes.io/name=alertmanager | sed 
 
 
 
+# Should show Type: PersistentVolumeClaim for Grafana
+kubectl -n monitoring describe pod -l app.kubernetes.io/name=grafana | sed -n '/Volumes:/,/Events:/p'
+
+# And for Alertmanager
+kubectl -n monitoring describe pod -l app.kubernetes.io/name=alertmanager | sed -n '/Volumes:/,/Events:/p'
+
+
+
+
+
+
