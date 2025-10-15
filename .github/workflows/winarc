@@ -670,3 +670,45 @@ kubectl -n $ARC_NS describe pod -l app.kubernetes.io/name=actions-runner-control
 
 
 
+
+
+
+
+ARC_NS=runner-controller
+kubectl -n $ARC_NS get pod -o wide
+# copy the controller pod name, then:
+CTRL_POD=$(kubectl -n $ARC_NS get pod -l app -o name | head -n1)  # if unsure, just paste the pod name
+kubectl -n $ARC_NS get pod runner-controller-gha-rs-controller-5f7455f77-j74sm -o jsonpath='{.metadata.labels}{"\n"}'
+
+
+
+
+# EXAMPLE — replace the values on the right with what you actually saw on the pod
+kubectl -n $ARC_NS patch svc arc-controller-metrics --type='merge' -p '{
+  "spec": {
+    "selector": {
+      "app.kubernetes.io/name": "gha-rs-controller",
+      "app.kubernetes.io/instance": "runner-controller"
+    }
+  }
+}'
+
+
+
+
+kubectl -n $ARC_NS get endpoints arc-controller-metrics -o wide
+# You should now see the Pod IP and port listed
+
+
+kubectl -n $ARC_NS describe pod runner-controller-gha-rs-controller-5f7455f77-j74sm | grep -A3 -n "Port:"
+# Or curl directly once endpoints exist:
+kubectl -n $ARC_NS port-forward svc/arc-controller-metrics 18080:8080 &
+curl -s http://localhost:18080/metrics | head
+
+
+
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090 &
+curl -s http://localhost:9090/api/v1/targets \
+ | jq '.data.activeTargets[] | select(.labels.job=="serviceMonitor/runner-controller/arc-controller") | {health:.health,labels:.labels}'
+
+
