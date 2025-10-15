@@ -626,3 +626,17 @@ kubectl -n monitoring rollout restart statefulset kube-prometheus-stack-grafana
 kubectl -n monitoring get pods
 
 
+
+# Prometheus sees its TSDB and retention
+kubectl -n monitoring exec -it statefulset/prometheus-kube-prometheus-stack-prometheus -- \
+  promtool tsdb status /prometheus
+
+# Grafana data dir is on the PVC
+kubectl -n monitoring exec -it statefulset/kube-prometheus-stack-grafana -- df -h /var/lib/grafana
+
+# Alertmanager state persistence
+kubectl -n monitoring exec -it statefulset/alertmanager-kube-prometheus-stack-alertmanager -- \
+  ls -l /alertmanager
+
+
+
