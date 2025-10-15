@@ -605,3 +605,24 @@ helm -n monitoring rollback kube-prometheus-stack <N>
 # 3) Try your deploy again
 terraform apply
 
+
+
+
+
+
+# 1) Make sure your zone list matches your worker nodes
+kubectl get nodes -o wide -L topology.kubernetes.io/zone
+
+# 2) Apply the chart with the AZ pinning + persistence
+terraform apply
+
+# 3) Verify pods are up using the bound PVCs
+kubectl -n monitoring get pods
+
+# If any are still Pending/CrashLoop, restart just the statefulsets (PVCs stay attached)
+kubectl -n monitoring rollout restart statefulset prometheus-kube-prometheus-stack-prometheus
+kubectl -n monitoring rollout restart statefulset alertmanager-kube-prometheus-stack-alertmanager
+kubectl -n monitoring rollout restart statefulset kube-prometheus-stack-grafana
+kubectl -n monitoring get pods
+
+
