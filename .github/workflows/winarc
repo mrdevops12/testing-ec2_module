@@ -712,3 +712,5 @@ curl -s http://localhost:9090/api/v1/targets \
  | jq '.data.activeTargets[] | select(.labels.job=="serviceMonitor/runner-controller/arc-controller") | {health:.health,labels:.labels}'
 
 
+
+namespace !~ ${SystemNamespace:regex}
