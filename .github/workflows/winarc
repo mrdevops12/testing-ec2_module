@@ -724,3 +724,7 @@ label_values(gha_controller_running_listeners, namespace)
 label_values(gha_desired_runners, actions_github_com_scale_set_name)
 label_values(gha_desired_runners, namespace)
 
+
+
+/^(runner-set|win-runner-set)$/
+
