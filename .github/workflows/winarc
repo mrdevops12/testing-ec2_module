@@ -714,3 +714,5 @@ curl -s http://localhost:9090/api/v1/targets \
 
 
 namespace !~ ${SystemNamespace:regex}
+
+actions_github_com_scale_set_name
