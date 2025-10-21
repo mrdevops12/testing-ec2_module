@@ -1,0 +1,18 @@
+helm list -A | grep prometheus
+
+helm uninstall prometheus_stack -n monitoring
+
+kubectl delete secret,configmap -n monitoring -l "owner=helm"
+
+kubectl get secret -n monitoring | grep prometheus
+kubectl get configmap -n monitoring | grep prometheus
+
+kubectl delete crd $(kubectl get crd | grep 'prometheus\|alertmanager\|servicemonitor\|podmonitor\|prometheusrule' | awk '{print $1}')
+
+  kubectl get all -n monitoring
+
+  kubectl delete namespace monitoring
+
+  
+
+                             
