@@ -13,6 +13,9 @@ kubectl delete crd $(kubectl get crd | grep 'prometheus\|alertmanager\|servicemo
 
   kubectl delete namespace monitoring
 
+kubectl delete namespace monitoring --ignore-not-found
+
+
   
 
                              
