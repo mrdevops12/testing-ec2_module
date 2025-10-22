@@ -1,0 +1,26 @@
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-additional-scrape-configs
+  namespace: monitoring
+data:
+  awx-api-scrape.yaml: |
+    - job_name: 'awx-api-metrics'
+      metrics_path: /api/v2/metrics/
+      scheme: https
+      static_configs:
+        - targets: ['awx.devops-tools.prd.aws.qdx.com']
+      tls_config:
+        insecure_skip_verify: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  additionalScrapeConfigs:
+    name: prometheus-additional-scrape-configs
+    key: awx-api-scrape.yaml
+EOF
