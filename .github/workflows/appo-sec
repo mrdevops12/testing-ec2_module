@@ -1,0 +1,24 @@
+kubectl get secret kube-prometheus-stack-prometheus-scrape-confg -n monitoring -o yaml > backup-prometheus-scrape-config.yaml
+
+kubectl get secret kube-prometheus-stack-prometheus-scrape-confg -n monitoring -o jsonpath='{.data.additional-scrape-configs}' | base64 -d > prometheus-scrape.yaml
+
+
+
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+
+
+
+
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-confg \
+  --from-file=additional-scrape-configs=prometheus-scrape.yaml \
+  -n monitoring \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
+kubectl delete pod -l app=prometheus -n monitoring
