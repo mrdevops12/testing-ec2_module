@@ -35,3 +35,6 @@ kubectl create secret generic kube-prometheus-stack-prometheus-scrape-confg \
 
 
 kubectl delete pod -l app=prometheus -n monitoring
+
+kubectl delete pod -l prometheus=kube-prometheus-stack-prometheus -n monitoring
+
