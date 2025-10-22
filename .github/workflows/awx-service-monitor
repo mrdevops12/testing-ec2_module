@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: awx-operator-servicemonitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  namespaceSelector:
+    matchNames:
+      - awx-operator
+  endpoints:
+    - port: https
+      targetPort: 8443
+      scheme: https
+      interval: 30s
+      tlsConfig:
+        insecureSkipVerify: true
