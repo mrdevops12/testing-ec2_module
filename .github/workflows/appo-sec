@@ -14,6 +14,19 @@ kubectl get secret kube-prometheus-stack-prometheus-scrape-confg -n monitoring -
 
 
 
+cat <<EOF > prometheus-scrape.yaml
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+EOF
+
+
+
+
 
 kubectl create secret generic kube-prometheus-stack-prometheus-scrape-confg \
   --from-file=additional-scrape-configs=prometheus-scrape.yaml \
