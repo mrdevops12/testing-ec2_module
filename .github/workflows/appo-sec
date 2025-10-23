@@ -211,6 +211,10 @@ kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
 
 
 
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml
 
 
 
