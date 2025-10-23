@@ -392,5 +392,6 @@ kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
 kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=180s
 
+kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring --force --grace-period=0
 
 
