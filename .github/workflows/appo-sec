@@ -100,6 +100,23 @@ kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
 kubectl get secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
 
 
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-confg -n monitoring
+
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
+kubectl get secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
+
+kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
+
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- \
+grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
+
+
+
 
 
 
