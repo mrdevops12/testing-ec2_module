@@ -116,6 +116,11 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- 
 grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
 
+kubectl -n monitoring get prometheus kube-prometheus-stack-prometheus -o yaml | grep -A4 additionalScrapeConfigs
+
+
+
+
 
 
 
