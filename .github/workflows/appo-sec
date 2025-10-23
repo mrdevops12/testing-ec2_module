@@ -283,3 +283,58 @@ kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
 
 
 
+
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-config -n monitoring --ignore-not-found
+kubectl delete secret awx-token-secret -n monitoring --ignore-not-found
+kubectl delete secret awx-token -n monitoring --ignore-not-found
+
+
+kubectl create secret generic awx-token -n monitoring \
+  --from-literal=token=J4dxvtZXbeBzMNZt9VUETWCLZQIS89
+
+
+cat <<EOF > /root/prometheus-apollo-secrect/prometheus-scrape.yaml
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  authorization:
+    type: Bearer
+    credentials_file: /etc/prometheus/secrets/awx-token/token
+EOF
+
+
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml
+
+
+kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
+  --type='merge' \
+  -p '{
+    "spec": {
+      "secrets": [
+        "awx-token",
+        "kube-prometheus-stack-prometheus-scrape-config"
+      ],
+      "additionalScrapeConfigs": {
+        "name": "kube-prometheus-stack-prometheus-scrape-config",
+        "key": "additional-scrape-configs.yaml"
+      }
+    }
+  }'
+
+
+kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=120s
+
+
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- \
+grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
+
+
+
