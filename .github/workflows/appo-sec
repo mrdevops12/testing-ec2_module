@@ -132,6 +132,29 @@ kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
 
 
 
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  authorization:
+    type: Bearer
+    credentials: J4dxvtZXbeBzMNZt9VUETWCLZQIS89
+
+
+
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml
+
+
+
+
+
 
 
 
