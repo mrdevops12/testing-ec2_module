@@ -84,5 +84,25 @@ kubectl create secret generic kube-prometheus-stack-prometheus-scrape-confg \
 
 
 
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-confg -n monitoring
+
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl get secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
+
+
+
+
+
+
 
 
