@@ -205,6 +205,9 @@ kubectl create secret generic awx-token-secret \
 
 
 
+kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
+  --type='merge' \
+  -p '{"spec":{"secrets":["awx-token-secret"]}}'
 
 
 
