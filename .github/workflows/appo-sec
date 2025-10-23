@@ -394,4 +394,5 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n m
 
 kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring --force --grace-period=0
 
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- ls /etc/prometheus/secrets/
 
