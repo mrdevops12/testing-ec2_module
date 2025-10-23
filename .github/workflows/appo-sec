@@ -62,3 +62,19 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 \
 
 
 
+
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  authorization:
+    type: Bearer
+    credentials: "J4dxvtZXbeBzMNZt9VUETWCLZQIS89"
+
+
+
+
