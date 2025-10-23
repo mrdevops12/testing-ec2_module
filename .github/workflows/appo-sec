@@ -411,3 +411,15 @@ kubectl describe ingress -n monitoring | grep -A2 prometheus
 kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9090
 
 
+kubectl delete prometheus,kubeletservice,servicemonitor,alertmanager,podmonitor -n monitoring --all
+
+helm uninstall kube-prometheus-stack -n monitoring
+
+kubectl delete all,cm,secret,sa,svc,svcaccount,pvc,pv,ingress,deploy,sts,ds -n monitoring --selector=app=kube-prometheus-stack
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-config -n monitoring --ignore-not-found
+kubectl delete secret awx-token-secret -n monitoring --ignore-not-found
+
+kubectl get crd | grep monitoring.coreos.com | awk '{print $1}' | xargs kubectl delete crd --ignore-not-found
+
+
+
