@@ -183,6 +183,29 @@ grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
 
 
+cat <<EOF > /root/prometheus-apollo-secrect/prometheus-scrape.yaml
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+  - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  authorization:
+    type: Bearer
+    credentials_file: /etc/prometheus/secrets/awx-token/token
+EOF
+
+
+kubectl create secret generic awx-token-secret \
+  -n monitoring \
+  --from-literal=token=J4dxvtZXbeBzMNZt9VUETWCLZQIS89
+
+
+
+
+
 
 
 
