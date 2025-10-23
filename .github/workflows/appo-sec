@@ -426,3 +426,33 @@ kubectl create secret generic awx-token-secret \
   --from-literal=awx-token=J4dxtvZBxeBMNzZ9UETWCIZQI589 \
   -n monitoring
 
+
+
+kubectl edit statefulset kube-prometheus-stack-prometheus -n monitoring
+
+- name: awx-token
+  secret:
+    secretName: awx-token-secret
+
+
+
+- name: awx-token
+  mountPath: /etc/prometheus/secrets
+  readOnly: true
+
+
+- job_name: 'awx'
+  scheme: https
+  metrics_path: /api/v2/metrics
+  scrape_interval: 15s
+  bearer_token: /etc/prometheus/secrets/awx-token
+  tls_config:
+    insecure_skip_verify: true
+  static_configs:
+    - targets:
+      - devops-tools.prd.aws.qdx.com
+
+
+kubectl rollout restart statefulset kube-prometheus-stack-prometheus -n monitoring
+
+
