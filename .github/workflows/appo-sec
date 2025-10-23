@@ -396,3 +396,18 @@ kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring --force --
 
 kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- ls /etc/prometheus/secrets/
 
+
+
+
+kubectl get svc -n monitoring | grep prometheus
+kubectl describe svc kube-prometheus-stack-prometheus -n monitoring | grep -A5 Endpoints
+
+kubectl label pod -n monitoring prometheus-kube-prometheus-stack-prometheus-0 app.kubernetes.io/name=prometheus --overwrite
+
+kubectl delete pod -n monitoring prometheus-kube-prometheus-stack-prometheus-0
+
+kubectl get ingress -n monitoring
+kubectl describe ingress -n monitoring | grep -A2 prometheus
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9090
+
+
