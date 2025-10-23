@@ -338,3 +338,59 @@ grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
 
 
+
+
+
+cat <<EOF > /root/awx-additional-scrape.yaml
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  bearer_token: /etc/prometheus/secrets/awx-token/token
+EOF
+
+
+
+kubectl create configmap awx-additional-scrape \
+  -n monitoring \
+  --from-file=awx-additional-scrape.yaml=/root/awx-additional-scrape.yaml
+
+
+kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus \
+  --type='merge' \
+  -p '{
+    "spec": {
+      "volumes": [
+        {
+          "name": "awx-scrape-config",
+          "configMap": { "name": "awx-additional-scrape" }
+        },
+        {
+          "name": "awx-token-secret",
+          "secret": { "secretName": "awx-token" }
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "awx-scrape-config",
+          "mountPath": "/etc/prometheus/config_out/awx-additional-scrape.yaml",
+          "subPath": "awx-additional-scrape.yaml"
+        },
+        {
+          "name": "awx-token-secret",
+          "mountPath": "/etc/prometheus/secrets/awx-token"
+        }
+      ]
+    }
+  }'
+
+
+kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=180s
+
+
+
