@@ -77,4 +77,12 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 \
 
 
 
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-confg \
+  -n monitoring \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secrect/prometheus-scrape.yaml \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
+
+
 
