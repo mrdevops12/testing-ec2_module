@@ -119,6 +119,17 @@ grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 kubectl -n monitoring get prometheus kube-prometheus-stack-prometheus -o yaml | grep -A4 additionalScrapeConfigs
 
 
+kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus --type='merge' -p '{
+  "spec": {
+    "additionalScrapeConfigs": {
+      "name": "kube-prometheus-stack-prometheus-scrape-config",
+      "key": "additional-scrape-configs.yaml"
+    }
+  }
+}'
+
+
+
 
 
 
