@@ -718,6 +718,7 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- 
 
 kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
+curl -k -H "Authorization: Bearer J4dxvtZXbeBzMNZt9VUETWCLZQIS89" https://awx.devops-tools.prd.aws.qdx.com/api/v2/metrics/
 
 
 
