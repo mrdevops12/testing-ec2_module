@@ -613,3 +613,44 @@ kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus 
 kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- ls /etc/prometheus/secrets/
 
 
+
+
+
+
+
+
+kubectl -n monitoring patch statefulset prometheus-kube-prometheus-stack-prometheus \
+--type='json' \
+-p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/volumes/-",
+    "value": {
+      "name": "awx-token",
+      "secret": {
+        "secretName": "awx-token-secret"
+      }
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/volumeMounts/-",
+    "value": {
+      "name": "awx-token",
+      "mountPath": "/etc/prometheus/secrets",
+      "readOnly": true
+    }
+  }
+]'
+
+
+kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
+
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- ls /etc/prometheus/secrets/
+
+
+
+
+
+
+
