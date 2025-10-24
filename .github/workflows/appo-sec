@@ -497,4 +497,9 @@ kubectl -n monitoring patch statefulset kube-prometheus-stack-prometheus \
 kubectl rollout restart statefulset kube-prometheus-stack-prometheus -n monitoring
 
 
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- ls /etc/prometheus/secrets/
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- cat /etc/prometheus/secrets/awx-token
+
+
+
 
