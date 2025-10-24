@@ -456,3 +456,45 @@ kubectl edit statefulset kube-prometheus-stack-prometheus -n monitoring
 kubectl rollout restart statefulset kube-prometheus-stack-prometheus -n monitoring
 
 
+
+
+
+kubectl -n monitoring patch statefulset kube-prometheus-stack-prometheus \
+  --type='merge' \
+  -p '{
+    "spec": {
+      "template": {
+        "spec": {
+          "volumes": [
+            {
+              "name": "awx-token",
+              "secret": {
+                "secretName": "awx-token-secret"
+              }
+            }
+          ],
+          "containers": [
+            {
+              "name": "prometheus",
+              "volumeMounts": [
+                {
+                  "name": "awx-token",
+                  "mountPath": "/etc/prometheus/secrets",
+                  "readOnly": true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }'
+
+
+
+
+
+kubectl rollout restart statefulset kube-prometheus-stack-prometheus -n monitoring
+
+
+
