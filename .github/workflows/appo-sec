@@ -781,6 +781,9 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- 
 kubectl -n monitoring get pod prometheus-kube-prometheus-stack-prometheus-0 -o jsonpath='{.spec.containers[*].name}'
 
 
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -c prometheus -- grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
+
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -c prometheus -- curl -s localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="awx-api-metrics") | {scrapeUrl: .scrapeUrl, health: .health}'
 
 
 
