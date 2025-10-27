@@ -801,3 +801,11 @@ kubectl -n monitoring delete secret kube-prometheus-stack-prometheus-scrape-conf
 
 kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
 
+
+
+kubectl -n monitoring delete secret kube-prometheus-stack-prometheus-scrape-config
+
+kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
+
+
+
