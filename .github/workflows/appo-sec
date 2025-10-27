@@ -821,6 +821,10 @@ kubectl -n monitoring delete configmap prometheus-kube-prometheus-stack-promethe
 kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
 
 
+kubectl delete pod prometheus-kube-prometheus-stack-prometheus-0 -n monitoring --force --grace-period=0
+
+
+
 
 
 
