@@ -723,3 +723,58 @@ curl -k -H "Authorization: Bearer J4dxvtZXbeBzMNZt9VUETWCLZQIS89" https://awx.de
 
 
 
+
+
+
+
+
+vi /root/prometheus-apollo-secret/prometheus-scrape.yaml
+
+
+- job_name: 'awx-api-metrics'
+  metrics_path: /api/v2/metrics/
+  scheme: https
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['awx.devops-tools.prd.aws.qdx.com']
+  tls_config:
+    insecure_skip_verify: true
+  authorization:
+    type: Bearer
+    credentials: J4dxvtZXbeBzMNZt9VUETWCLZQIS89
+  headers:
+    Content-Type: application/json
+
+
+
+
+kubectl delete secret kube-prometheus-stack-prometheus-scrape-config -n monitoring
+
+kubectl create secret generic kube-prometheus-stack-prometheus-scrape-config \
+  --from-file=additional-scrape-configs.yaml=/root/prometheus-apollo-secret/prometheus-scrape.yaml \
+  -n monitoring
+
+kubectl patch prometheus kube-prometheus-stack-prometheus -n monitoring \
+  --type='merge' \
+  -p '{
+    "spec": {
+      "additionalScrapeConfigs": {
+        "name": "kube-prometheus-stack-prometheus-scrape-config",
+        "key": "additional-scrape-configs.yaml"
+      }
+    }
+  }'
+
+
+
+
+kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
+
+kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
+
+
+
+
+
+
+
