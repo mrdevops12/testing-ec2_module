@@ -788,3 +788,8 @@ kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -c 
 
 kubectl -n monitoring exec -it $(kubectl -n monitoring get pods -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}') -c $(kubectl -n monitoring get pods -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].spec.containers[0].name}') -- grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
+
+
+
+
+kubectl -n monitoring logs prometheus-kube-prometheus-stack-prometheus-0 -c prometheus | tail -n 30
