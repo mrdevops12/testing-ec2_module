@@ -809,3 +809,18 @@ kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus 
 
 
 
+kubectl -n monitoring logs prometheus-kube-prometheus-stack-prometheus-0 -c prometheus | tail -n 30
+
+
+kubectl -n monitoring delete configmap prometheus-kube-prometheus-stack-prometheus
+
+
+
+kubectl -n monitoring delete configmap prometheus-kube-prometheus-stack-prometheus
+
+kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
+
+
+
+
+
