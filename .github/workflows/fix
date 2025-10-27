@@ -1,0 +1,3 @@
+kubectl -n monitoring get configmap | grep prometheus
+kubectl -n monitoring delete configmap $(kubectl -n monitoring get configmap -o name | grep prometheus-kube-prometheus-stack-prometheus)
+kubectl -n monitoring delete statefulset prometheus-kube-prometheus-stack-prometheus
