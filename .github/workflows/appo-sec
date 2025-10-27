@@ -778,6 +778,7 @@ kubectl delete pod -l app.kubernetes.io/name=prometheus -n monitoring
 kubectl -n monitoring exec -it prometheus-kube-prometheus-stack-prometheus-0 -- grep -A10 "awx-api-metrics" /etc/prometheus/config_out/prometheus.env.yaml
 
 
+kubectl -n monitoring get pod prometheus-kube-prometheus-stack-prometheus-0 -o jsonpath='{.spec.containers[*].name}'
 
 
 
