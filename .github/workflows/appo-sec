@@ -793,3 +793,11 @@ kubectl -n monitoring exec -it $(kubectl -n monitoring get pods -l app.kubernete
 
 
 kubectl -n monitoring logs prometheus-kube-prometheus-stack-prometheus-0 -c prometheus | tail -n 30
+
+
+
+
+kubectl -n monitoring delete secret kube-prometheus-stack-prometheus-scrape-config
+
+kubectl rollout restart statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring
+
