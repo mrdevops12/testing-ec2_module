@@ -731,6 +731,9 @@ curl -k -H "Authorization: Bearer J4dxvtZXbeBzMNZt9VUETWCLZQIS89" https://awx.de
 vi /root/prometheus-apollo-secret/prometheus-scrape.yaml
 
 
+mkdir -p /root/prometheus-apollo-secret
+
+cat > /root/prometheus-apollo-secret/prometheus-scrape.yaml <<'EOC'
 - job_name: 'awx-api-metrics'
   metrics_path: /api/v2/metrics/
   scheme: https
@@ -744,6 +747,8 @@ vi /root/prometheus-apollo-secret/prometheus-scrape.yaml
     credentials: J4dxvtZXbeBzMNZt9VUETWCLZQIS89
   headers:
     Content-Type: application/json
+EOC
+
 
 
 
