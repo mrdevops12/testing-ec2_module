@@ -7,3 +7,35 @@ kubectl -n monitoring delete $(kubectl -n monitoring get configmap -o name | gre
 
 kubectl -n monitoring delete statefulset prometheus-kube-prometheus-stack-prometheus
 
+
+
+curl -k -H "Authorization: Bearer J4dxvtZXbeBzMNZt9VUETWCLZQIS89" \
+     -H "Content-Type: application/json" \
+     https://awx.devops-tools.prd.aws.qdx.com/api/v2/metrics/
+
+It works perfectly — the API returns valid metrics data.
+That proves the token and API are both correct.
+
+However, when Prometheus tries the same thing, the /metrics call fails.
+
+It works perfectly — the API returns valid metrics data.
+That proves the token and API are both correct.
+
+However, when Prometheus tries the same thing, the /metrics call fails.
+
+scheme: https
+authorization:
+  type: Bearer
+  credentials: J4dxvtZXbeBzMNZt9VUETWCLZQIS89
+headers:
+  Content-Type: application/json
+
+Prometheus does not send custom headers like Content-Type during HTTP scraping.
+It only supports limited headers (Authorization, User-Agent, etc.).
+
+The AWX /api/v2/metrics endpoint requires a proper Content-Type header (application/json) —
+without it, AWX thinks the request is invalid and returns:
+Authentication credentials were not provided.
+
+So the same token works from curl (which includes the Content-Type)
+but fails from Prometheus (which omits it automatically).
