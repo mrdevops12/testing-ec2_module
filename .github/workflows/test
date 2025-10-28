@@ -1,12 +1,32 @@
-Before I move ahead, I’d like to get your approval for the final solution to monitor AWX using Prometheus and Grafana.
+I would like to request your approval before proceeding with the final solution to enable AWX monitoring through Prometheus and Grafana.
 
-From our testing, we found that Prometheus cannot directly collect metrics from AWX because of authentication and header issues.
-To fix this, I suggest using an AWX Exporter, which is a small, open-source service made for this purpose.
+Over the past few days, I have performed detailed testing to identify the cause of our AWX metrics collection issue.
+We found that Prometheus cannot directly collect data from the AWX /api/v2/metrics endpoint due to authentication and header limitations.
+Although the API works when tested manually using the curl command and a token, Prometheus is unable to replicate the same type of request because it does not support sending custom headers like Content-Type.
+This limitation led to the repeated authentication (401) and service (503) errors observed earlier.
 
-🔹 It connects to the AWX API securely using stored credentials.
-🔹 It provides metrics in a format that Prometheus can easily read.
-🔹 This method is simple, reliable, and works well for production use.
+To resolve this permanently, I recommend implementing an AWX Exporter, which is a lightweight, open-source component designed specifically for Prometheus–AWX integration.
 
-Once you approve, I’ll deploy it in the monitoring namespace and connect it with our Grafana dashboard.
+Proposed Solution Overview:
 
-Please confirm if I can go ahead with this plan.
+The AWX Exporter connects securely to the AWX API using credentials stored in Kubernetes secrets.
+
+It converts AWX metrics into a Prometheus-compatible format and exposes them on port 9100.
+
+Prometheus will scrape the exporter endpoint to collect metrics, and Grafana will visualize them using the official AWX dashboard (ID: 14055).
+
+This is a stable, production-ready approach commonly used for AWX monitoring in enterprise environments.
+
+I also verified if we could reuse the same API token that we used in the curl command instead of username and password.
+The current AWX Exporter version does not support token-based authentication — only username and password are supported at this time.
+Using a token would require a custom modification, which is not recommended for long-term maintainability.
+
+Once approved, I will:
+
+Deploy the AWX Exporter in the monitoring namespace.
+
+Integrate it with Prometheus for metrics collection.
+
+Connect it with Grafana to visualize AWX job, API, and performance metrics.
+
+Please review this plan and confirm if I can proceed with the deployment.
