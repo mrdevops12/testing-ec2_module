@@ -1,0 +1,12 @@
+Before I move ahead, I’d like to get your approval for the final solution to monitor AWX using Prometheus and Grafana.
+
+From our testing, we found that Prometheus cannot directly collect metrics from AWX because of authentication and header issues.
+To fix this, I suggest using an AWX Exporter, which is a small, open-source service made for this purpose.
+
+🔹 It connects to the AWX API securely using stored credentials.
+🔹 It provides metrics in a format that Prometheus can easily read.
+🔹 This method is simple, reliable, and works well for production use.
+
+Once you approve, I’ll deploy it in the monitoring namespace and connect it with our Grafana dashboard.
+
+Please confirm if I can go ahead with this plan.
