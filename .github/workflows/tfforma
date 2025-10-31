@@ -1,0 +1,19 @@
+#--------------------------------------------
+# Terraform Format Check + Auto Fix Section
+#--------------------------------------------
+- name: 'Terraform Format Check'
+  id: fmt-check
+  working-directory: ./${{ github.event.inputs.classification }}
+  continue-on-error: true
+  run: |
+    echo "🔍 Checking Terraform formatting..."
+    terraform fmt -check -diff || echo "needs_fix=true" >> $GITHUB_ENV
+
+# If differences found, auto-fix them
+- name: 'Terraform Format Fix'
+  if: env.needs_fix == 'true'
+  working-directory: ./${{ github.event.inputs.classification }}
+  run: |
+    echo "🛠️ Formatting issues detected — fixing now..."
+    terraform fmt -recursive
+    echo "✅ All Terraform files reformatted successfully."
