@@ -1,1 +1,19 @@
 
+Instance Type	Approx Hourly Rate	Approx Monthly Cost*
+m6a.xlarge (4 vCPU / 16 GiB)	~$0.1111/hr (in Mumbai) 
+costcalc.cloudoptimo.com
++1
+	~$81.10/month 
+costcalc.cloudoptimo.com
+
+
+c6a.xlarge (~4 vCPU / 8 GiB)	~$0.1530/hr 
+costcalc.cloudoptimo.com
++1
+	~$110/month (0.153×24×30 ≈ 110)
+
+
+r6i.xlarge (4 vCPU / 32 GiB)	~$0.2520/hr 
+costcalc.cloudoptimo.com
++1
+	~$181/month (0.252×24×30 ≈
