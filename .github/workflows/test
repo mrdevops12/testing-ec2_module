@@ -1,19 +1,29 @@
+- name: Send TDM Job Completion Email
+  shell: bash
+  run: |
+    echo "[INFO]: Sending simple completion email to users"
+    
+    chmod +x ./cicd/scripts/send_email.py
 
-Instance Type	Approx Hourly Rate	Approx Monthly Cost*
-m6a.xlarge (4 vCPU / 16 GiB)	~$0.1111/hr (in Mumbai) 
-costcalc.cloudoptimo.com
-+1
-	~$81.10/month 
-costcalc.cloudoptimo.com
+    # Define recipient list
+    EMAIL_RECIPIENTS="${{ env.DEFAULT_EMAIL }}"
+    if [[ -f "usecases/${USECASE_NAME}/admin.ini" ]]; then
+        EMAIL_RECIPIENTS_TEMP=$(grep "EMAIL_RECIPIENTS" usecases/${USECASE_NAME}/admin.ini | cut -f 2 -d "=")
+        EMAIL_RECIPIENTS="${EMAIL_RECIPIENTS_TEMP},${EMAIL_RECIPIENTS}"
+        echo "Usecase specific recipients: ${EMAIL_RECIPIENTS}"
+    fi
 
+    # Define simple message
+    SUBJECT="TDM Job Execution Completed"
+    MESSAGE="Hello Team,\n\nThe TDM data generation job for usecase '${USECASE_NAME}' has been successfully completed.\n\nRegards,\nAutomation Pipeline"
 
-c6a.xlarge (~4 vCPU / 8 GiB)	~$0.1530/hr 
-costcalc.cloudoptimo.com
-+1
-	~$110/month (0.153×24×30 ≈ 110)
+    # Send email
+    python3 ./cicd/scripts/send_email.py \
+      "${{ env.FROM_ADDRESS }}" \
+      "${EMAIL_RECIPIENTS}" \
+      "${{ env.SMTP_SERVER }}" \
+      "${{ env.SMTP_PORT }}" \
+      "${SUBJECT}" \
+      "${MESSAGE}"
 
-
-r6i.xlarge (4 vCPU / 32 GiB)	~$0.2520/hr 
-costcalc.cloudoptimo.com
-+1
-	~$181/month (0.252×24×30 ≈
+    echo "[INFO]: Simple completion email sent"
