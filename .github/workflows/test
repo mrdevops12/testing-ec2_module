@@ -1,29 +1,15 @@
-- name: Send TDM Job Completion Email
-  shell: bash
-  run: |
-    echo "[INFO]: Sending simple completion email to users"
-    
-    chmod +x ./cicd/scripts/send_email.py
+aws s3api put-object --bucket ${S3_BUCKET_NAME} --key use-cases/${USECASE_NAME}/data/
+aws s3api put-object --bucket ${S3_BUCKET_NAME} --key use-cases/${USECASE_NAME}/data/4000_OCR_PDFs/
 
-    # Define recipient list
-    EMAIL_RECIPIENTS="${{ env.DEFAULT_EMAIL }}"
-    if [[ -f "usecases/${USECASE_NAME}/admin.ini" ]]; then
-        EMAIL_RECIPIENTS_TEMP=$(grep "EMAIL_RECIPIENTS" usecases/${USECASE_NAME}/admin.ini | cut -f 2 -d "=")
-        EMAIL_RECIPIENTS="${EMAIL_RECIPIENTS_TEMP},${EMAIL_RECIPIENTS}"
-        echo "Usecase specific recipients: ${EMAIL_RECIPIENTS}"
-    fi
+aws s3 rm s3://$S3_BUCKET_NAME/use-cases/$USECASE_NAME/data/4000_OCR_PDFs/ \
+  --recursive --exclude "*" --include "*.pdf" || true
 
-    # Define simple message
-    SUBJECT="TDM Job Execution Completed"
-    MESSAGE="Hello Team,\n\nThe TDM data generation job for usecase '${USECASE_NAME}' has been successfully completed.\n\nRegards,\nAutomation Pipeline"
 
-    # Send email
-    python3 ./cicd/scripts/send_email.py \
-      "${{ env.FROM_ADDRESS }}" \
-      "${EMAIL_RECIPIENTS}" \
-      "${{ env.SMTP_SERVER }}" \
-      "${{ env.SMTP_PORT }}" \
-      "${SUBJECT}" \
-      "${MESSAGE}"
 
-    echo "[INFO]: Simple completion email sent"
+aws s3api put-object --bucket ${S3_BUCKET_NAME} --key use-cases/${USECASE_NAME}/data/
+aws s3api put-object --bucket ${S3_BUCKET_NAME} --key use-cases/${USECASE_NAME}/data/2000_IDAA_METADATA_JSONs/
+
+
+
+aws s3 rm s3://$S3_BUCKET_NAME/use-cases/$USECASE_NAME/data/2000_IDAA_METADATA_JSONs/ \
+  --recursive --exclude "*" --include "*.json" || true
