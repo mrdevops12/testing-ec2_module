@@ -27,3 +27,8 @@ aws s3 sync usecases/${USECASE_NAME}/data/ \
   --exclude "*" --include "4000_OCR_PDFs/SFT.csv"
 
 
+
+aws s3 cp usecases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv \
+  s3://$S3_BUCKET_NAME/use-cases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv --only-show-errors
+
+
