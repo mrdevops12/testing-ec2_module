@@ -50,4 +50,9 @@ aws s3 cp "usecases/corporatesite-genrock/data/4000_OCR_PDFs/SFT.csv" \
 --no-progress --only-show-errors || echo "SFT.csv not found — skipping upload"
 
 
+echo "Current directory: $(pwd)"
+ls -l usecases/corporatesite-genrock/data/4000_OCR_PDFs/ || echo "Local folder missing"
+
+
+
 
