@@ -21,3 +21,9 @@ aws s3 sync usecases/${USECASE_NAME}/data/4000_OCR_PDFs/ \
   s3://$S3_BUCKET_NAME/use-cases/${USECASE_NAME}/data/4000_OCR_PDFs/ \
   --exclude "*" --include "SFT.csv"
 
+
+aws s3 sync usecases/${USECASE_NAME}/data/ \
+  s3://$S3_BUCKET_NAME/use-cases/${USECASE_NAME}/data/ \
+  --exclude "*" --include "4000_OCR_PDFs/SFT.csv"
+
+
