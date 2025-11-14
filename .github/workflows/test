@@ -32,3 +32,9 @@ aws s3 cp usecases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv \
   s3://$S3_BUCKET_NAME/use-cases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv --only-show-errors
 
 
+aws s3 cp "usecases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv" \
+"s3://${S3_BUCKET_NAME}/use-cases/${USECASE_NAME}/data/4000_OCR_PDFs/SFT.csv" \
+--no-progress --only-show-errors || echo "⚠️ SFT.csv not found, skipping upload"
+
+
+
