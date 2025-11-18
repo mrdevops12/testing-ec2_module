@@ -1,0 +1,138 @@
+#!/bin/sh
+set -x
+
+# ===========================================================
+#  Launch Script for JMeter Master/Slave (EFS-backed)
+# ===========================================================
+# Purpose:
+#   - Mount AWS EFS instead of S3
+#   - Load plugins from shared EFS
+#   - Run JMeter tests in Master or Master-Slave mode
+#   - Store logs and reports in EFS
+# ===========================================================
+
+# -----------------------------
+# Mount EFS to /mnt/jmeter
+# -----------------------------
+EFS_ID="fs-068c1bab8aa9f3c9b"       # Replace with your actual EFS ID
+REGION="us-east-1"
+MOUNT_POINT="/mnt/jmeter"
+
+echo "[INFO] Installing EFS utilities and mounting EFS"
+sudo yum install -y amazon-efs-utils nfs-utils
+sudo mkdir -p ${MOUNT_POINT}
+
+# Try EFS mount with fallback
+if ! sudo mount -t efs ${EFS_ID}:/ ${MOUNT_POINT}; then
+  echo "[WARN] Native EFS mount failed. Trying NFS mount..."
+  sudo mount -t nfs4 -o nfsvers=4.1 ${EFS_ID}.efs.${REGION}.amazonaws.com:/ ${MOUNT_POINT}
+fi
+
+echo "[INFO] EFS mounted successfully at ${MOUNT_POINT}"
+df -hT | grep ${MOUNT_POINT}
+
+# -----------------------------
+# Copy plugin JARs from EFS to JMeter lib/ext
+# -----------------------------
+if [[ -d "${MOUNT_POINT}/jmeter/plugins" ]]; then
+  echo "[INFO] Copying plugin JARs from EFS"
+  sudo cp ${MOUNT_POINT}/jmeter/plugins/*.jar /opt/apache-jmeter-5.6.3/lib/ext || true
+else
+  echo "[WARN] No plugin directory found in EFS path: ${MOUNT_POINT}/jmeter/plugins"
+fi
+
+# -----------------------------
+# JVM memory settings
+# -----------------------------
+JVM_ARGS="-Xms1024m -Xmx2867m"
+export JVM_ARGS
+echo "[INFO] JVM_ARGS=${JVM_ARGS}"
+
+# Go to JMeter binary directory
+cd /opt/apache-jmeter-5.6.3/bin
+
+# -----------------------------
+# Install JMeter PluginManager & essential plugins
+# -----------------------------
+echo "[INFO] Installing JMeter Plugin Manager and core plugins"
+java -cp /opt/apache-jmeter-5.6.3/lib/ext/jmeter-plugins-manager-1.10.jar \
+     org.jmeterplugins.repository.PluginManagerCMDInstaller
+
+PluginsManagerCMD.sh install jpgc-casutg,jpgc-dummy
+PluginsManagerCMD.sh status
+
+# -----------------------------
+# Input arguments
+# -----------------------------
+USECASE_NAME=$1     # e.g. loadtest1
+DATE_STAMP=$2       # timestamp or build id
+SLAVE_IPS=$3        # comma-separated slave IPs
+
+CUSTOM_PROPS=""
+CUSTOM_PROPS2=""
+
+# -----------------------------
+# Handle custom.properties if present
+# -----------------------------
+sudo rm -rf /mnt/custom.properties
+
+if [[ -f "${MOUNT_POINT}/use-cases/${USECASE_NAME}/custom.properties" ]]; then
+  echo "[INFO] Found custom.properties for ${USECASE_NAME}"
+
+  while IFS= read -r line; do
+    [[ "$line" =~ ^#.*$ ]] && continue
+    echo "$line" >> /mnt/custom.properties
+  done < ${MOUNT_POINT}/use-cases/${USECASE_NAME}/custom.properties
+
+  for e_prop in $(cat /mnt/custom.properties); do
+    CUSTOM_PROPS+=" -G${e_prop}"
+    CUSTOM_PROPS2+=" -J${e_prop}"
+  done
+else
+  echo "[WARN] custom.properties not found for ${USECASE_NAME}, using defaults"
+fi
+
+CUSTOM_PROPS="${CUSTOM_PROPS} ${CUSTOM_PROPS2}"
+echo "[INFO] Effective custom properties: ${CUSTOM_PROPS}"
+
+# -----------------------------
+# Prepare result directory
+# -----------------------------
+RESULT_DIR="${MOUNT_POINT}/results/${USECASE_NAME}/${DATE_STAMP}"
+sudo mkdir -p ${RESULT_DIR}
+
+echo "[INFO] Result directory prepared: ${RESULT_DIR}"
+
+# -----------------------------
+# Execute JMeter
+# -----------------------------
+echo "[INFO] START Running JMeter on $(date)"
+
+if [[ -z "$SLAVE_IPS" ]]; then
+  echo "[INFO] Running in Master Mode"
+  sudo sh jmeter -n \
+    -t ${MOUNT_POINT}/use-cases/${USECASE_NAME}/master.jmx \
+    -l ${RESULT_DIR}/${USECASE_NAME}.jtl \
+    -j ${RESULT_DIR}/${USECASE_NAME}.log \
+    -Jdatadir=${MOUNT_POINT}/use-cases/${USECASE_NAME}/data \
+    ${CUSTOM_PROPS} \
+    -Jprometheus.port='9270' \
+    -Jprometheus.host='0.0.0.0' \
+    -GDateTime=${DATE_STAMP} -JDateTime=${DATE_STAMP} \
+    -e -o ${RESULT_DIR}/HtmlReport
+else
+  echo "[INFO] Running in Master-Slave Mode with slaves: ${SLAVE_IPS}"
+  sudo sh jmeter -n \
+    -t ${MOUNT_POINT}/use-cases/${USECASE_NAME}/master.jmx -R ${SLAVE_IPS} \
+    -l ${RESULT_DIR}/${USECASE_NAME}.jtl \
+    -j ${RESULT_DIR}/${USECASE_NAME}.log \
+    -Jdatadir=${MOUNT_POINT}/use-cases/${USECASE_NAME}/data \
+    ${CUSTOM_PROPS} \
+    -Jprometheus.port='9270' \
+    -Jprometheus.host='0.0.0.0' \
+    -GDateTime=${DATE_STAMP} -JDateTime=${DATE_STAMP} \
+    -e -o ${RESULT_DIR}/HtmlReport
+fi
+
+echo "[INFO] END Running JMeter on $(date)"
+echo "[INFO] Results stored in ${RESULT_DIR}"
