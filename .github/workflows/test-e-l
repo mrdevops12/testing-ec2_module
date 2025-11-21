@@ -1,1 +1,168 @@
 
+#!/bin/bash
+set -euo pipefail
+
+# ===========================================================
+#  JMeter Master/Slave Hybrid Launcher (S3 + EFS)
+# ===========================================================
+#  - Keeps S3 mount and plugin libraries as-is
+#  - Writes .jtl/.log/HtmlReport to EFS
+#  - Repairs failed .jtl (adds closing tag)
+#  - Generates HTML report (no re-run)
+#  - Uploads results & status.txt to S3 with retry logic
+# ===========================================================
+
+# -----------------------------
+# Configuration
+# -----------------------------
+EFS_ID="fs-068c1bab8aa9f3c9b"
+REGION="us-east-1"
+EFS_MOUNT="/mnt/efs-jmeter"
+S3_BUCKET="dgx-dsope-jmeter-usecases-dev-s3"
+
+JMETER_HOME="/opt/apache-jmeter-5.6.3"
+JMETER_BIN="${JMETER_HOME}/bin"
+JMETER_EXT="${JMETER_HOME}/lib/ext"
+
+export JVM_ARGS="-Xms1024m -Xmx2867m"
+
+# -----------------------------
+# Input Arguments
+# -----------------------------
+USECASE_NAME="${1:?Provide USECASE_NAME}"
+DATE_STAMP="${2:?Provide DATE_STAMP}"
+SLAVE_IPS="${3:-}"  # optional
+
+# -----------------------------
+# Mount EFS (only if not mounted)
+# -----------------------------
+sudo mkdir -p "${EFS_MOUNT}"
+if ! mount | grep -q "on ${EFS_MOUNT} "; then
+  echo "[INFO] Mounting EFS ${EFS_ID} at ${EFS_MOUNT}"
+  sudo yum install -y amazon-efs-utils nfs-utils >/dev/null 2>&1 || true
+  if ! sudo mount -t efs "${EFS_ID}:/" "${EFS_MOUNT}" 2>/dev/null; then
+    echo "[WARN] EFS native mount failed, retrying with NFS"
+    sudo mount -t nfs4 -o nfsvers=4.1 "${EFS_ID}.efs.${REGION}.amazonaws.com:/" "${EFS_MOUNT}"
+  fi
+else
+  echo "[INFO] EFS already mounted at ${EFS_MOUNT}"
+fi
+
+# -----------------------------
+# Mount S3 (existing logic)
+# -----------------------------
+sudo mkdir -p /mnt/jmeter
+sudo mount -t s3 "${S3_BUCKET}" /mnt/jmeter || true
+
+# -----------------------------
+# Copy plugin JARs from S3
+# -----------------------------
+if [ -d /mnt/jmeter/jmeter/plugins ]; then
+  echo "[INFO] Copying plugins from S3..."
+  sudo cp -u /mnt/jmeter/jmeter/plugins/*.jar "${JMETER_EXT}" || true
+fi
+
+# -----------------------------
+# Handle custom.properties
+# -----------------------------
+TEMP_PROPS="/mnt/custom.properties"
+sudo rm -f "${TEMP_PROPS}" || true
+CUSTOM_PROPS=()
+
+if [ -f "/mnt/jmeter/use-cases/${USECASE_NAME}/custom.properties" ]; then
+  echo "[INFO] Found custom.properties for ${USECASE_NAME}"
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    echo "$line" | sudo tee -a "${TEMP_PROPS}" >/dev/null
+  done < "/mnt/jmeter/use-cases/${USECASE_NAME}/custom.properties"
+
+  while IFS= read -r prop; do
+    [[ -z "$prop" ]] && continue
+    CUSTOM_PROPS+=("-G${prop}" "-J${prop}")
+  done < "${TEMP_PROPS}"
+fi
+
+# -----------------------------
+# Results stored on EFS
+# -----------------------------
+RESULT_DIR="${EFS_MOUNT}/results/${USECASE_NAME}/${DATE_STAMP}"
+HTML_DIR="${RESULT_DIR}/HtmlReport"
+sudo mkdir -p "${RESULT_DIR}" "${HTML_DIR}"
+
+JTL_FILE="${RESULT_DIR}/${USECASE_NAME}.jtl"
+LOG_FILE="${RESULT_DIR}/${USECASE_NAME}.log"
+STATUS_FILE="${RESULT_DIR}/status.txt"
+
+# -----------------------------
+# Build JMeter command
+# -----------------------------
+JMETER_CMD=(sudo "${JMETER_BIN}/jmeter" -n
+  -t "/mnt/jmeter/use-cases/${USECASE_NAME}/master.jmx"
+  -l "${JTL_FILE}"
+  -j "${LOG_FILE}"
+  -Jdatadir="/mnt/jmeter/use-cases/${USECASE_NAME}/data"
+  -Jprometheus.port=9270
+  -Jprometheus.host=0.0.0.0
+  -GDateTime="${DATE_STAMP}" -JDateTime="${DATE_STAMP}"
+  "${CUSTOM_PROPS[@]}"
+)
+
+if [[ -n "${SLAVE_IPS}" ]]; then
+  JMETER_CMD+=(-R "${SLAVE_IPS}")
+fi
+
+# -----------------------------
+# Run JMeter test
+# -----------------------------
+echo "[INFO] Starting JMeter test at $(date)"
+"${JMETER_CMD[@]}"
+echo "[INFO] Finished JMeter test at $(date)"
+
+# -----------------------------
+# Validate and repair .jtl
+# -----------------------------
+if ! tail -n 1 "${JTL_FILE}" | grep -q "</testResults>"; then
+  echo "[WARN] Incomplete .jtl detected — fixing closing tag"
+  sed -i '$d' "${JTL_FILE}" || true
+  echo "</testResults>" | sudo tee -a "${JTL_FILE}" >/dev/null
+  echo "REPAIRED at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+else
+  echo "SUCCESS at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+fi
+
+# -----------------------------
+# Generate HTML report
+# -----------------------------
+if ! sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
+  echo "[ERROR] Report generation failed"
+  echo "FAILED at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+  exit 1
+fi
+
+# -----------------------------
+# Upload to S3 with retry logic
+# -----------------------------
+echo "[INFO] Uploading results to S3..."
+for i in {1..3}; do
+  if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" --recursive --only-show-errors; then
+    echo "[INFO] Upload succeeded on attempt $i"
+    break
+  else
+    echo "[WARN] Upload attempt $i failed. Retrying in 10s..."
+    sleep 10
+  fi
+  [[ $i -eq 3 ]] && echo "[ERROR] All upload attempts failed" && exit 1
+done
+
+# -----------------------------
+# Completion summary
+# -----------------------------
+echo "[INFO] ✅ Results uploaded:"
+echo "       s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/"
+echo "[INFO] Status file created at: ${STATUS_FILE}"
+
+# -----------------------------
+# Cleanup
+# -----------------------------
+sudo umount "${EFS_MOUNT}" || true
+echo "[INFO] Completed successfully at $(date)"
