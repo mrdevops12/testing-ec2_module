@@ -119,4 +119,27 @@ resource "helm_release" "prometheus_stack" {
   run: terraform apply -input=false -no-color -var-file="tfvars/orion-${{ env.ENVIRONMENT }}.tfvars" -auto-approve
 
 
+Existing S3 setup remains unchanged — it’s still used for configurations, plugins, and JMX files (/mnt/jmeter).
 
+EFS mount added (/mnt/efs-jmeter) to store .jtl, .log, and HTML reports for faster access and post-run analysis.
+
+Automatic .jtl repair — if a result file is incomplete, the script fixes the closing tag (</testResults>) before report generation.
+
+No re-run of the JMeter job — in case of report failure, we only edit and repair the .jtl file on EFS to regenerate the report, avoiding any additional system load.
+
+Status tracking file (status.txt) is created in each result folder showing:
+
+SUCCESS – Normal report
+
+REPAIRED – Fixed .jtl
+
+FAILED – Report generation error
+
+Both success and failure reports (after repair, if any) are kept in EFS and then uploaded to S3.
+
+S3 upload – entire result folder (reports + status) is automatically uploaded under:
+s3://dgx-dsope-jmeter-usecases-dev-s3/results/<usecase>/<timestamp>/
+
+Retry logic – up to 3 S3 upload attempts with 10-second delay per attempt.
+
+Automatic EFS unmount after completion (can be retained for debugging if preferred).
