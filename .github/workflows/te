@@ -143,3 +143,6 @@ s3://dgx-dsope-jmeter-usecases-dev-s3/results/<usecase>/<timestamp>/
 Retry logic – up to 3 S3 upload attempts with 10-second delay per attempt.
 
 Automatic EFS unmount after completion (can be retained for debugging if preferred).
+
+sudo ./launch-efs.sh qecs $(date +%Y%m%d-%H%M%S) 10.124.22
+
