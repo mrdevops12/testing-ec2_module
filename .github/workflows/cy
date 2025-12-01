@@ -1,69 +1,8 @@
-1. Who talks to CyberArk CCP?
-
-In our setup, AWX is not a standalone server; it runs in Kubernetes.
-
-Jobs run inside Execution Environment (EE) pods.
-
-When a job fetches a secret, the EE pod makes an HTTPS call like:
-
-https://ccp.company.com/AIMWebService/api/Accounts?AppID=...&Safe=...&Object=...
-
-2. What CCP team cares about
-
-CyberArk doesn’t care about:
-
-The AWX web UI endpoint (like awx.devsecops…com).
-
-The target servers/DBs you run tasks against.
-
-They care about:
-
-The source IP that reaches their CCP endpoint.
-(Because CCP checks: “Is this request coming from an allowed machine for this AppID?”)
-
-3. So, what IP do they expect from us?
-
-That depends on how our Kubernetes cluster egresses traffic:
-
-If cluster is in private subnets with a NAT gateway → the NAT Gateway Elastic IP(s) are the source.
-
-If traffic goes via corporate proxy → the proxy IP(s) are the source.
-
-If CCP is on a private link/peering → the node/ENI private IPs (or a specific egress gateway) are the source.
-
-The client basically wants to know: “Which IP address(es) will CCP actually see when your AWX job pod calls me?”
-
-4. Why its importetent:
-
-CyberArk needs to whitelist those IPs against your AppID (e.g., awx-dev).
-If they don’t, CCP will return 401/403 Unauthorized, even though your Safe/Object is correct.
-
-
-
-
-
-
-
-
-EKS nodes and pods use private subnet 10.124.31.0/24.
-
-These private IPs cannot go directly to the internet (no IGW, no NAT).
-
-The default route (0.0.0.0/0) in the VPC route table points to the Transit Gateway (tgw-05dc7ad63f1c5dc85).
-
-All outbound traffic from EKS goes into this Transit Gateway.
-
-The TGW forwards the traffic to our corporate/on-prem network (via TGW attachment).
-
-In the corporate network, the traffic passes through a firewall/proxy device.
-
-That firewall/proxy assigns a fixed egress IP address (or a pool of IPs).
-
-When AWX calls CyberArk CCP, CCP does not see the 10.124.31.x subnet.
-
-CyberArk only sees the firewall/proxy egress IP(s) as the source.
-
-Those egress IP(s) are what you must give to the CyberArk team for AppID allow-listing.
-
-
-https://github.com/actions/actions-runner-controller-charts
+| Feature                     | Description                                                     |
+| --------------------------- | --------------------------------------------------------------- |
+| ✅ **Self-healing**          | Automatically stops bad EC2 and picks another stopped one.      |
+| ✅ **SSH readiness check**   | Waits up to 5 min for port 22 before declaring failure.         |
+| ✅ **Logging clarity**       | Every step logs `[INFO]`, `[WARN]`, `[ERROR]`, `[CRITICAL]`.    |
+| ✅ **Fallback pool logic**   | If 1 master or slave fails, picks another from remaining list.  |
+| ✅ **`summary.json` output** | Shows which nodes started, failed, replaced.                    |
+| ✅ **Backward compatible**   | `instance_info.json` stays same — no pipeline changes required. |
