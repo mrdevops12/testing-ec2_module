@@ -146,3 +146,9 @@ Automatic EFS unmount after completion (can be retained for debugging if preferr
 
 sudo ./launch-efs.sh qecs $(date +%Y%m%d-%H%M%S) 10.124.22
 
+
+
+our Grafana is deployed inside an AWS EKS Kubernetes cluster, not installed directly on a Linux server. Because of this, the installation instructions you shared (editing grafana.ini, placing files in /var/lib/grafana/plugins/, restarting the Grafana server, etc.) do not work in our environment. Those steps only apply to Grafana installed directly on a Linux VM.
+
+New Relic is not an open-source monitoring solution. It is a commercial tool with a free tier. The Grafana plugin for New Relic is free, but all actual monitoring data requires a valid New Relic account and license. Full functionality is not available without a paid subscription.
+
