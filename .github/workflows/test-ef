@@ -34,16 +34,12 @@ DATE_STAMP="${2:?Provide DATE_STAMP}"
 SLAVE_IPS="${3:-}"  # optional
 
 # ===========================================================
-# STEP 1: Ensure mount helper packages are installed
+# STEP 1: Ensure mount helper available
 # ===========================================================
 echo "[INFO] Checking for mount-s3 helper..."
 if ! command -v mount-s3 &>/dev/null; then
-  echo "[INFO] Installing AWS CLI and mount helpers..."
-  sudo yum install -y awscli amazon-efs-utils amazon-linux-extras util-linux >/dev/null 2>&1 || true
-  if command -v amazon-linux-extras &>/dev/null; then
-    sudo amazon-linux-extras enable awscli >/dev/null 2>&1 || true
-    sudo yum install -y awscli >/dev/null 2>&1 || true
-  fi
+  echo "[WARN] mount-s3 helper not found; creating symlink to AWS CLI..."
+  sudo ln -sf /usr/local/bin/aws /usr/bin/mount-s3 || true
 fi
 
 # ===========================================================
