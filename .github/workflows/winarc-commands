@@ -423,5 +423,9 @@ kubectl get pv | grep prometheus
 kubectl describe pv <pv-name> | grep -i reclaim
 
 
+for u in $(cut -d: -f1 /etc/passwd); do echo "$u : $(chage -l $u | grep 'Password expires')"; done
+
+
+
 
 
