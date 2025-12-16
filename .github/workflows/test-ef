@@ -3,18 +3,10 @@ set -euo pipefail
 set -x
 
 # ===========================================================
-#  JMeter Master/Slave Hybrid Launcher (S3 first, then EFS)
-# ===========================================================
-#  - Mounts S3 first (input source)
-#  - Mounts EFS for results/output
-#  - Reads input test plans, data & plugins from S3
-#  - Repairs broken .jtl (only last line)
-#  - Generates HTML report (no rerun)
-#  - Uploads all reports (success/failure) to S3
-#  - Includes retry logic and final status marker
+#  JMeter Master/Slave Launcher (S3 on Master, EFS for Results)
 # ===========================================================
 
-EFS_ID="fs-068c1blab8aa9f3c9b"
+EFS_ID="fs-068c1bab8aa9f3c9b"
 REGION="us-east-1"
 EFS_MOUNT="/mnt/efs-jmeter"
 S3_BUCKET="dgx-dsope-jmeter-usecases-dev-s3"
@@ -26,38 +18,46 @@ JMETER_EXT="${JMETER_HOME}/lib/ext"
 
 export JVM_ARGS="-Xms1024m -Xmx2867m"
 
-# -----------------------------
-# Input Arguments
-# -----------------------------
 USECASE_NAME="${1:?Provide USECASE_NAME}"
 DATE_STAMP="${2:?Provide DATE_STAMP}"
 SLAVE_IPS="${3:-}"  # optional
 
 # ===========================================================
-# STEP 1: Ensure mount helper available
+# STEP 1: Identify Role (Master / Slave)
 # ===========================================================
-echo "[INFO] Checking for mount-s3 helper..."
-if ! command -v mount-s3 &>/dev/null; then
-  echo "[WARN] mount-s3 helper not found; creating symlink to AWS CLI..."
-  sudo ln -sf /usr/local/bin/aws /usr/bin/mount-s3 || true
+HOSTNAME=$(hostname)
+if [[ "$HOSTNAME" == *"master"* ]]; then
+  NODE_ROLE="MASTER"
+else
+  NODE_ROLE="SLAVE"
 fi
 
+echo "=========================================================="
+echo "[INFO] Detected Node Role  : ${NODE_ROLE}"
+echo "[INFO] Hostname            : ${HOSTNAME}"
+echo "[INFO] Region              : ${REGION}"
+echo "=========================================================="
+
 # ===========================================================
-# STEP 2: Mount S3 (All inputs come from S3)
+# STEP 2: Mount S3 only on Master
 # ===========================================================
-sudo mkdir -p "${S3_MOUNT}"
-if ! mount | grep -q "on ${S3_MOUNT} "; then
-  echo "[INFO] Mounting S3 bucket ${S3_BUCKET} to ${S3_MOUNT}..."
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  echo "[INFO] Running on Master node — attempting to mount S3..."
+  sudo mkdir -p "${S3_MOUNT}"
+
   if ! sudo mount -t s3 "${S3_BUCKET}" "${S3_MOUNT}" 2>/dev/null; then
-    echo "[ERROR] Failed to mount S3 bucket. Exiting."
-    exit 1
+    echo "[WARN] mount-s3 failed, falling back to aws s3 sync..."
+    aws s3 sync "s3://${S3_BUCKET}" "${S3_MOUNT}" --only-show-errors || {
+      echo "[ERROR] S3 mount and sync both failed — exiting."
+      exit 1
+    }
   fi
 else
-  echo "[INFO] S3 already mounted at ${S3_MOUNT}"
+  echo "[INFO] This node is a Slave — skipping S3 mount."
 fi
 
 # ===========================================================
-# STEP 3: Mount EFS (for results/output)
+# STEP 3: Mount EFS for Results
 # ===========================================================
 sudo mkdir -p "${EFS_MOUNT}"
 if ! mount | grep -q "on ${EFS_MOUNT} "; then
@@ -72,29 +72,24 @@ else
 fi
 
 # ===========================================================
-# STEP 4: Copy JMeter plugins from S3
+# STEP 4: Copy JMeter Plugins
 # ===========================================================
-if [ -d "${S3_MOUNT}/jmeter/plugins" ]; then
-  echo "[INFO] Copying plugins from S3..."
+if [[ "$NODE_ROLE" == "MASTER" && -d "${S3_MOUNT}/jmeter/plugins" ]]; then
+  echo "[INFO] Copying JMeter plugins from S3..."
   sudo cp -u "${S3_MOUNT}/jmeter/plugins/"*.jar "${JMETER_EXT}" || true
 fi
 
 # ===========================================================
-# STEP 5: Handle custom.properties from S3
+# STEP 5: Handle custom.properties
 # ===========================================================
 TEMP_PROPS="/mnt/custom.properties"
 sudo rm -f "${TEMP_PROPS}" || true
 CUSTOM_PROPS=()
 
-if [ -f "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" ]; then
+if [[ "$NODE_ROLE" == "MASTER" && -f "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" ]]; then
   echo "[INFO] Found custom.properties for ${USECASE_NAME}"
-  while IFS= read -r line; do
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    echo "$line" | sudo tee -a "${TEMP_PROPS}" >/dev/null
-  done < "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties"
-
+  grep -vE '^[[:space:]]*#|^$' "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" | sudo tee "${TEMP_PROPS}" >/dev/null
   while IFS= read -r prop; do
-    [[ -z "$prop" ]] && continue
     CUSTOM_PROPS+=("-G${prop}" "-J${prop}")
   done < "${TEMP_PROPS}"
 fi
@@ -111,7 +106,7 @@ LOG_FILE="${RESULT_DIR}/${USECASE_NAME}.log"
 STATUS_FILE="${RESULT_DIR}/status.txt"
 
 # ===========================================================
-# STEP 7: Build and Run JMeter Command
+# STEP 7: Run JMeter Test
 # ===========================================================
 JMETER_CMD=(sudo "${JMETER_BIN}/jmeter" -n
   -t "${S3_MOUNT}/use-cases/${USECASE_NAME}/master.jmx"
@@ -133,10 +128,10 @@ echo "[INFO] Starting JMeter test at $(date)"
 echo "[INFO] JMeter test completed at $(date)"
 
 # ===========================================================
-# STEP 8: Validate and Repair .jtl File
+# STEP 8: Repair .jtl if Incomplete
 # ===========================================================
 if ! tail -n 1 "${JTL_FILE}" | grep -q "</testResults>"; then
-  echo "[WARN] Incomplete .jtl detected — fixing last line..."
+  echo "[WARN] Fixing incomplete .jtl..."
   sed -i '$d' "${JTL_FILE}" || true
   echo "</testResults>" | sudo tee -a "${JTL_FILE}" >/dev/null
   echo "REPAIRED at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
@@ -145,58 +140,32 @@ else
 fi
 
 # ===========================================================
-# STEP 9: Check for Sample Data
-# ===========================================================
-if ! grep -q "<sample" "${JTL_FILE}"; then
-  echo "[ERROR] No <sample> entries found — no data recorded."
-  echo "NO_DATA at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
-  aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" --recursive --only-show-errors || true
-  echo "[SUMMARY] Status: NO_DATA | $(date)"
-  exit 0
-fi
-
-# ===========================================================
-# STEP 10: Generate HTML Report (no re-run)
+# STEP 9: Generate HTML Report
 # ===========================================================
 if ! sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
   echo "[ERROR] Report generation failed"
   echo "FAILED at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
-else
-  echo "[INFO] Report generated successfully"
 fi
 
 # ===========================================================
-# STEP 11: Upload Results to S3 (retry logic)
+# STEP 10: Upload Results to S3
 # ===========================================================
-for i in {1..3}; do
-  echo "[INFO] Uploading results to S3 (attempt $i)..."
-  if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" --recursive --only-show-errors; then
-    echo "[INFO] Upload succeeded on attempt $i"
-    break
-  else
-    echo "[WARN] Upload failed, retrying in 10s..."
-    sleep 10
-  fi
-  [[ $i -eq 3 ]] && echo "[ERROR] All upload attempts failed" && exit 1
-done
-
-# ===========================================================
-# STEP 12: Final Summary and Cleanup
-# ===========================================================
-if grep -q "NO_DATA" "${STATUS_FILE}"; then
-  STATUS_SUMMARY="NO_DATA"
-elif grep -q "FAILED" "${STATUS_FILE}"; then
-  STATUS_SUMMARY="FAILED"
-elif grep -q "REPAIRED" "${STATUS_FILE}"; then
-  STATUS_SUMMARY="REPAIRED"
-else
-  STATUS_SUMMARY="SUCCESS"
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  echo "[INFO] Uploading results to S3..."
+  for i in {1..3}; do
+    if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" --recursive --only-show-errors; then
+      echo "[INFO] Upload succeeded on attempt $i"
+      break
+    else
+      echo "[WARN] Upload attempt $i failed. Retrying..."
+      sleep 10
+    fi
+  done
 fi
 
-echo "[SUMMARY] Status: ${STATUS_SUMMARY} | $(date)"
-echo "[INFO] Results at: s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/"
-echo "[INFO] Status file: ${STATUS_FILE}"
-
-# Keep S3 mounted for next run, unmount only EFS
+# ===========================================================
+# STEP 11: Cleanup
+# ===========================================================
 sudo umount "${EFS_MOUNT}" || true
 echo "[INFO] Completed successfully at $(date)"
+echo "[INFO] Final Node Role: ${NODE_ROLE} | Hostname: ${HOSTNAME}"
