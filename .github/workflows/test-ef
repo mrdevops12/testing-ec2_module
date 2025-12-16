@@ -1,7 +1,7 @@
 #!/bin/bash
 # ===========================================================
 #  JMeter Master/Slave Launcher (S3 → Plugins → EFS)
-#  ✅ Stable version with retry logic and all core features
+#   Stable version with retry logic and all core features
 # ===========================================================
 set -x
 
@@ -44,7 +44,7 @@ if [[ "$NODE_ROLE" == "MASTER" ]]; then
   for attempt in {1..3}; do
     echo "[INFO] Mount attempt ${attempt}..."
     if sudo mount -t s3 "${S3_BUCKET}" "${S3_MOUNT}" 2>/dev/null; then
-      echo "[INFO] ✅ S3 bucket mounted successfully at ${S3_MOUNT}"
+      echo "[INFO]  S3 bucket mounted successfully at ${S3_MOUNT}"
       success=true
       break
     else
@@ -54,7 +54,7 @@ if [[ "$NODE_ROLE" == "MASTER" ]]; then
   done
 
   if [ "$success" = false ]; then
-    echo "[ERROR] ❌ Failed to mount S3 bucket after 3 attempts. Continuing without abort."
+    echo "[ERROR]  Failed to mount S3 bucket after 3 attempts. Continuing without abort."
   fi
 else
   echo "[INFO] Slave node — skipping S3 mount"
@@ -66,7 +66,7 @@ fi
 if [[ "$NODE_ROLE" == "MASTER" && -d "${S3_MOUNT}/jmeter/plugins" ]]; then
   echo "[INFO] Copying JMeter plugins from S3 to ${JMETER_EXT}..."
   sudo cp -u "${S3_MOUNT}/jmeter/plugins/"*.jar "${JMETER_EXT}" || true
-  echo "[INFO] ✅ Plugin copy completed successfully"
+  echo "[INFO]  Plugin copy completed successfully"
 else
   echo "[WARN] Plugin directory not found in S3 — skipping plugin copy"
 fi
@@ -129,9 +129,9 @@ JMETER_CMD=(sudo "${JMETER_BIN}/jmeter" -n
 )
 [[ -n "${SLAVE_IPS}" ]] && JMETER_CMD+=(-R "${SLAVE_IPS}")
 
-echo "[INFO] 🚀 Starting JMeter test at $(date)"
-"${JMETER_CMD[@]}" || echo "[WARN] ⚠️ JMeter exited with a non-zero code"
-echo "[INFO] ✅ JMeter test completed at $(date)"
+echo "[INFO]  Starting JMeter test at $(date)"
+"${JMETER_CMD[@]}" || echo "[WARN]  JMeter exited with a non-zero code"
+echo "[INFO]  JMeter test completed at $(date)"
 
 # ===========================================================
 # STEP 8: Repair .jtl if incomplete
@@ -152,7 +152,7 @@ if ! sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
   echo "[ERROR] Report generation failed"
   echo "FAILED at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
 else
-  echo "[INFO] ✅ Report generated successfully"
+  echo "[INFO]  Report generated successfully"
 fi
 
 # ===========================================================
@@ -163,7 +163,7 @@ if [[ "$NODE_ROLE" == "MASTER" ]]; then
   for i in {1..3}; do
     if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" \
        --recursive --only-show-errors; then
-      echo "[INFO] ✅ Upload succeeded on attempt $i"
+      echo "[INFO]  Upload succeeded on attempt $i"
       break
     else
       echo "[WARN] Upload attempt $i failed, retrying in 10s..."
@@ -176,5 +176,5 @@ fi
 # STEP 11: Cleanup
 # ===========================================================
 sudo umount "${EFS_MOUNT}" 2>/dev/null || true
-echo "[INFO] 🎯 Completed successfully at $(date)"
+echo "[INFO]  Completed successfully at $(date)"
 echo "[INFO] Final Node Role: ${NODE_ROLE} | Hostname: ${HOSTNAME}"
