@@ -1,0 +1,160 @@
+#!/bin/bash
+# ===========================================================
+#  JMeter Master/Slave Launcher (S3 → Plugins → EFS)
+#  
+# ===========================================================
+set -x
+set -u   # keep unset variable check
+
+EFS_ID="fs-068c1bab8aa9f3c9b"
+REGION="us-east-1"
+EFS_MOUNT="/mnt/efs-jmeter"
+S3_BUCKET="dgx-dsope-jmeter-usecases-dev-s3"
+S3_MOUNT="/mnt/jmeter"
+
+JMETER_HOME="/opt/apache-jmeter-5.6.3"
+JMETER_BIN="${JMETER_HOME}/bin"
+JMETER_EXT="${JMETER_HOME}/lib/ext"
+export JVM_ARGS="-Xms1024m -Xmx2867m"
+
+USECASE_NAME="${1:?Provide USECASE_NAME}"
+DATE_STAMP="${2:?Provide DATE_STAMP}"
+SLAVE_IPS="${3:-}"  # optional
+
+# ===========================================================
+# STEP 1: Detect node role
+# ===========================================================
+HOSTNAME=$(hostname)
+[[ "$HOSTNAME" == *"master"* ]] && NODE_ROLE="MASTER" || NODE_ROLE="SLAVE"
+echo "[INFO] Node Role: ${NODE_ROLE} | Hostname: ${HOSTNAME}"
+
+# ===========================================================
+# STEP 2: Mount S3 (using mount-s3 helper)
+# ===========================================================
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  echo "[INFO] Mounting S3 bucket ${S3_BUCKET} at ${S3_MOUNT}"
+  sudo mount-s3 "${S3_BUCKET}" "${S3_MOUNT}" || {
+    echo "[ERROR]  Failed to mount S3 bucket — aborting pipeline"
+    exit 1
+  }
+
+  # Copy plugins
+  if [[ -d "${S3_MOUNT}/jmeter/plugins" ]]; then
+    echo "[INFO] Copying JMeter plugins..."
+    sudo cp -u "${S3_MOUNT}/jmeter/plugins/"*.jar "${JMETER_EXT}" 2>/dev/null || true
+    echo "[INFO]  Plugin copy completed"
+  else
+    echo "[ERROR]  Plugin directory not found in S3 — aborting pipeline"
+    exit 1
+  fi
+else
+  echo "[INFO] Slave node — skipping S3 mount"
+fi
+
+# ===========================================================
+# STEP 3: Mount EFS (results)
+# ===========================================================
+sudo mkdir -p "${EFS_MOUNT}"
+if ! mountpoint -q "${EFS_MOUNT}"; then
+  echo "[INFO] Mounting EFS..."
+  sudo yum install -y amazon-efs-utils nfs-utils >/dev/null 2>&1 || true
+  sudo mount -t efs "${EFS_ID}:/" "${EFS_MOUNT}" 2>/dev/null || \
+  sudo mount -t nfs4 -o nfsvers=4.1 "${EFS_ID}.efs.${REGION}.amazonaws.com:/" "${EFS_MOUNT}" || {
+    echo "[ERROR]  EFS mount failed — aborting pipeline"
+    exit 1
+  }
+else
+  echo "[INFO] EFS already mounted at ${EFS_MOUNT}"
+fi
+
+# ===========================================================
+# STEP 4: Handle custom.properties
+# ===========================================================
+TEMP_PROPS="/mnt/custom.properties"
+sudo rm -f "${TEMP_PROPS}" || true
+CUSTOM_PROPS=()
+
+if [[ "$NODE_ROLE" == "MASTER" && -f "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" ]]; then
+  echo "[INFO] Found custom.properties for ${USECASE_NAME}"
+  grep -vE '^[[:space:]]*#|^$' "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" | sudo tee "${TEMP_PROPS}" >/dev/null
+  while IFS= read -r prop; do
+    CUSTOM_PROPS+=("-G${prop}" "-J${prop}")
+  done < "${TEMP_PROPS}"
+else
+  echo "[INFO] No custom.properties found — using defaults"
+fi
+
+# ===========================================================
+# STEP 5: Prepare result directories (on EFS)
+# ===========================================================
+RESULT_DIR="${EFS_MOUNT}/results/${USECASE_NAME}/${DATE_STAMP}"
+HTML_DIR="${RESULT_DIR}/HtmlReport"
+sudo mkdir -p "${RESULT_DIR}" "${HTML_DIR}"
+
+JTL_FILE="${RESULT_DIR}/${USECASE_NAME}.jtl"
+LOG_FILE="${RESULT_DIR}/${USECASE_NAME}.log"
+STATUS_FILE="${RESULT_DIR}/status.txt"
+
+# ===========================================================
+# STEP 6: Run JMeter test
+# ===========================================================
+JMETER_CMD=(sudo "${JMETER_BIN}/jmeter" -n
+  -t "${S3_MOUNT}/use-cases/${USECASE_NAME}/master.jmx"
+  -l "${JTL_FILE}"
+  -j "${LOG_FILE}"
+  -Jdatadir="${S3_MOUNT}/use-cases/${USECASE_NAME}/data"
+  -Jprometheus.port=9270
+  -Jprometheus.host=0.0.0.0
+  -GDateTime="${DATE_STAMP}" -JDateTime="${DATE_STAMP}"
+  "${CUSTOM_PROPS[@]}"
+)
+[[ -n "${SLAVE_IPS}" ]] && JMETER_CMD+=(-R "${SLAVE_IPS}")
+
+echo "[INFO]  Starting JMeter test at $(date)"
+"${JMETER_CMD[@]}" || { echo "[ERROR]  JMeter exited with non-zero code"; exit 1; }
+echo "[INFO]  JMeter test completed at $(date)"
+
+# ===========================================================
+# STEP 7: Generate HTML report (repair by removing last line if needed)
+# ===========================================================
+echo "[INFO] Generating HTML report..."
+if ! sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
+  echo "[WARN] Report generation failed — removing last line and retrying..."
+  sed -i '$d' "${JTL_FILE}" || true
+
+  if sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
+    echo "[INFO]  Report generated successfully after trimming last line"
+    echo "REPAIRED_REPORT at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+  else
+    echo "[ERROR]  Report generation failed even after trimming"
+    echo "FAILED_REPORT at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+    # continue to upload for audit
+  fi
+else
+  echo "[INFO]  Report generated successfully"
+  echo "SUCCESS at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+fi
+
+# ===========================================================
+# STEP 8: Upload results back to S3 (Master only, always upload for audit)
+# ===========================================================
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  echo "[INFO] Uploading results to S3 (including failed reports for audit)..."
+  for i in {1..3}; do
+    if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" \
+       --recursive --only-show-errors; then
+      echo "[INFO]  Upload succeeded on attempt $i"
+      break
+    else
+      echo "[WARN] Upload attempt $i failed, retrying in 10s..."
+      sleep 10
+    fi
+  done
+fi
+
+# ===========================================================
+# STEP 9: Cleanup
+# ===========================================================
+sudo umount "${EFS_MOUNT}" 2>/dev/null || true
+echo "[INFO]  Completed successfully at $(date)"
+echo "[INFO] Final Node Role: ${NODE_ROLE} | Hostname: ${HOSTNAME}"
