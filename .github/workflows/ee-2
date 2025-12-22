@@ -1,0 +1,129 @@
+#!/bin/bash
+# ===========================================================
+#  JMeter Master/Slave Launcher (S3 → Plugins → EFS → Report)
+# ===========================================================
+set -x
+set -u   # check for unset variables
+
+EFS_ID="fs-068c1bab8aa9f3c9b"
+REGION="us-east-1"
+EFS_MOUNT="/mnt/efs-jmeter"
+S3_BUCKET="dgx-dsope-jmeter-usecases-dev-s3"
+S3_MOUNT="/mnt/jmeter"
+
+JMETER_HOME="/opt/apache-jmeter-5.6.3"
+JMETER_BIN="${JMETER_HOME}/bin"
+JMETER_EXT="${JMETER_HOME}/lib/ext"
+export JVM_ARGS="-Xms1024m -Xmx2867m"
+
+USECASE_NAME="${1:?Provide USECASE_NAME}"
+DATE_STAMP="${2:?Provide DATE_STAMP}"
+SLAVE_IPS="${3:-}"  # optional
+
+# -------- Detect node role --------
+HOSTNAME=$(hostname)
+[[ "$HOSTNAME" == *"master"* ]] && NODE_ROLE="MASTER" || NODE_ROLE="SLAVE"
+echo "[INFO] Node Role: ${NODE_ROLE} | Hostname: ${HOSTNAME}"
+
+# -------- Mount S3 + copy plugins (Master only) --------
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  sudo mount-s3 "${S3_BUCKET}" "${S3_MOUNT}" || { echo "[ERROR] S3 mount failed"; exit 1; }
+  if [[ -d "${S3_MOUNT}/jmeter/plugins" ]]; then
+    sudo cp -u "${S3_MOUNT}/jmeter/plugins/"*.jar "${JMETER_EXT}" 2>/dev/null || true
+  fi
+fi
+
+# -------- Mount EFS --------
+sudo mkdir -p "${EFS_MOUNT}"
+if ! mountpoint -q "${EFS_MOUNT}"; then
+  sudo yum install -y amazon-efs-utils nfs-utils >/dev/null 2>&1 || true
+  sudo mount -t efs "${EFS_ID}:/" "${EFS_MOUNT}" 2>/dev/null || \
+  sudo mount -t nfs4 -o nfsvers=4.1 "${EFS_ID}.efs.${REGION}.amazonaws.com:/" "${EFS_MOUNT}" || exit 1
+fi
+
+# -------- Prepare result paths --------
+RESULT_DIR="${EFS_MOUNT}/results/${USECASE_NAME}/${DATE_STAMP}"
+HTML_DIR="${RESULT_DIR}/HtmlReport"
+sudo mkdir -p "${RESULT_DIR}" "${HTML_DIR}"
+
+JTL_FILE="${RESULT_DIR}/${USECASE_NAME}.jtl"
+LOG_FILE="${RESULT_DIR}/${USECASE_NAME}.log"
+STATUS_FILE="${RESULT_DIR}/status.txt"
+
+# ===========================================================
+#  ADDING BACK custom.properties SUPPORT (FIX)
+# ===========================================================
+CUSTOM_PROPS=()
+TEMP_PROPS="/mnt/custom.properties"
+sudo rm -f "${TEMP_PROPS}" || true
+
+if [[ "$NODE_ROLE" == "MASTER" && -f "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" ]]; then
+  echo "[INFO] Found custom.properties for ${USECASE_NAME}"
+  grep -vE '^[[:space:]]*#|^$' "${S3_MOUNT}/use-cases/${USECASE_NAME}/custom.properties" | sudo tee "${TEMP_PROPS}" >/dev/null
+  while IFS= read -r prop; do
+    CUSTOM_PROPS+=("-G${prop}" "-J${prop}")
+  done < "${TEMP_PROPS}"
+else
+  echo "[INFO] No custom.properties found — using defaults"
+fi
+
+# -------- Run JMeter --------
+cd "${JMETER_BIN}"
+if [[ -z "${SLAVE_IPS}" ]]; then
+  echo "[INFO] Run JMeter in Master Mode"
+  sudo sh jmeter -n \
+    -t "${S3_MOUNT}/use-cases/${USECASE_NAME}/master.jmx" \
+    -l "${JTL_FILE}" \
+    -j "${LOG_FILE}" \
+    -Jdatadir="${S3_MOUNT}/use-cases/${USECASE_NAME}/data" \
+    "${CUSTOM_PROPS[@]}" \
+    -Jprometheus.port=9270 \
+    -Jprometheus.host=0.0.0.0 \
+    -GDateTime="${DATE_STAMP}" -JDateTime="${DATE_STAMP}" \
+    -e -o "${HTML_DIR}"
+else
+  echo "[INFO] Run JMeter in Master-Slave Mode"
+  sudo sh jmeter -n \
+    -t "${S3_MOUNT}/use-cases/${USECASE_NAME}/master.jmx" -R "${SLAVE_IPS}" \
+    -l "${JTL_FILE}" \
+    -j "${LOG_FILE}" \
+    -Jdatadir="${S3_MOUNT}/use-cases/${USECASE_NAME}/data" \
+    "${CUSTOM_PROPS[@]}" \
+    -Jprometheus.port=9270 \
+    -Jprometheus.host=0.0.0.0 \
+    -GDateTime="${DATE_STAMP}" -JDateTime="${DATE_STAMP}" \
+    -e -o "${HTML_DIR}"
+fi
+
+# -------- Detect report success --------
+if [[ -s "${HTML_DIR}/index.html" ]] && [[ $(sudo find "${HTML_DIR}" -type f | wc -l) -gt 5 ]]; then
+  echo "SUCCESS at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+else
+  echo "[WARN] Report generation failed — trimming last JTL line and retrying"
+  if [[ $(wc -l < "${JTL_FILE}") -gt 1 ]]; then
+    sudo sed -i '$d' "${JTL_FILE}" || true
+  fi
+  if sudo "${JMETER_BIN}/jmeter" -g "${JTL_FILE}" -o "${HTML_DIR}"; then
+    echo "REPAIRED_REPORT at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+  else
+    echo "FAILED_REPORT at $(date)" | sudo tee "${STATUS_FILE}" >/dev/null
+  fi
+fi
+
+# -------- Upload results to S3 --------
+if [[ "$NODE_ROLE" == "MASTER" ]]; then
+  for i in {1..3}; do
+    if aws s3 cp "${RESULT_DIR}" "s3://${S3_BUCKET}/results/${USECASE_NAME}/${DATE_STAMP}/" \
+       --recursive --only-show-errors; then
+      break
+    else
+      sleep 10
+    fi
+  done
+fi
+
+# -------- Cleanup EFS --------
+sudo rm -rf "${RESULT_DIR}" || true
+sudo umount "${EFS_MOUNT}" 2>/dev/null || true
+
+echo "[INFO] Completed at $(date)"
