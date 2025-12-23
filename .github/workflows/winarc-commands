@@ -425,7 +425,7 @@ kubectl describe pv <pv-name> | grep -i reclaim
 
 for u in $(cut -d: -f1 /etc/passwd); do echo "$u : $(chage -l $u | grep 'Password expires')"; done
 
-
+Our automation script correctly injects duration=900 from custom.properties, but the LABOS JMX test plan hardcodes duration=8100 and does not reference ${duration}. In the IDAA use case, the JMX is wired correctly, but the injected value is 0, which disables the duration limit. In both cases, the script is functioning as expected — the test plan or parameter values need to be updated to enforce the intended runtime.”
 
 
 
