@@ -1,0 +1,158 @@
+  execute-jmeter-job:
+    runs-on: pe
+    timeout-minutes: 2440
+    container:
+      image: "817786531545.dkr.ecr.us-east-1.amazonaws.com/qdx-qe-tools:github-runner-pe-v1"
+      options: --user root --volume /data:/data
+      credentials:
+        username: AWS
+        password: ${{ secrets.AWS_SHAREDTOOLS_PRD_ECR_PASSWORD }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    needs:
+      - pre-deploy-notification
+      - copy-data-to-s3
+      - start-jmeter-servers
+    outputs:
+      result: ${{ steps.set-result.outputs.result }}
+
+    env:
+      DATE_STAMP: ${{ needs.start-jmeter-servers.outputs.DATE_STAMP }}
+      master_IP: "${{ needs.start-jmeter-servers.outputs.master_IP }}"
+      slave_IPs: "${{ needs.start-jmeter-servers.outputs.slave_IPs }}"
+      master_slave_IPs: "${{ needs.start-jmeter-servers.outputs.master_slave_IPs }}"
+      all_ids: "${{ needs.start-jmeter-servers.outputs.all_ids }}"
+      instance_ids: "${{ needs.start-jmeter-servers.outputs.instance_ids }}"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          role-session-name: ${{ github.repository.id }}-${{ github.job }}-${{ github.triggering_actor }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          touch ~/.ssh/known_hosts
+
+      - name: Authenticate with EKS cluster
+        run: |
+          aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+          kubectl config set-context --current --namespace=jmeter
+
+      - name: Apply Prometheus config changes
+        shell: bash
+        run: |
+          echo "Updating Prometheus configuration for master and slave nodes"
+          if [[ -f "usecases/${USECASE_NAME}/admin.ini" ]]; then
+            PROJECT_NAME=$(grep "projectname" usecases/${USECASE_NAME}/admin.ini | cut -d "=" -f 2)
+          fi
+          python3 -u cicd/scripts/update_prometheus_config_master_slave.py jmeter ${master_slave_IPs} ${JMETER_PORT} ${PROJECT_NAME} ${USECASE_NAME}
+
+      - name: Send email to the users
+        shell: bash
+        run: |
+          EMAIL_RECIPIENTS="${{ env.DEFAULT_EMAIL }}"
+          if [[ -f "usecases/${USECASE_NAME}/admin.ini" ]]; then
+            EMAIL_RECIPIENTS_TEMP=$(grep "EMAIL_RECIPIENTS" usecases/${USECASE_NAME}/admin.ini | cut -d "=" -f 2)
+            EMAIL_RECIPIENTS="${EMAIL_RECIPIENTS_TEMP},${EMAIL_RECIPIENTS}"
+          fi
+          python3 ./cicd/scripts/send_email.py "${{ env.FROM_ADDRESS }}" "${EMAIL_RECIPIENTS}" "${{ env.SMTP_SERVER }}" "${{ env.SMTP_PORT }}"
+
+      - name: Run Jmeter Jobs
+        shell: bash
+        run: |
+          ssh-keyscan -H $master_IP >> ~/.ssh/known_hosts
+          sleep 60
+          ssh -i ~/.ssh/id_rsa ec2-user@$master_IP -o "StrictHostKeyChecking no" \
+            "sudo bash /home/ec2-user/launch.sh '${USECASE_NAME}' '${DATE_STAMP}'"
+
+      # ⭐⭐⭐ INSERTED EFS RETRY LOGIC ⭐⭐⭐
+      - name: Retry report generation if failed (EFS-based)
+        shell: bash
+        run: |
+          echo "[INFO] Checking report health before stopping instances..."
+
+          USECASE="${{ env.USECASE_NAME }}"
+          DATE="${{ env.DATE_STAMP }}"
+          BASE="/mnt/efs-jmeter/results/${USECASE}/${DATE}"
+          JTL="${BASE}/${USECASE}.jtl"
+          REPORT="${BASE}/HtmlReport"
+
+          echo "[INFO] JTL File: $JTL"
+          echo "[INFO] Report Dir: $REPORT"
+
+          if [[ ! -s "${REPORT}/index.html" ]] || [[ $(find "${REPORT}" -type f | wc -l) -lt 5 ]]; then
+            echo "[WARN] Report generation failed — retrying using EFS logic"
+
+            if [[ $(wc -l < "${JTL}") -gt 1 ]]; then
+              echo "[INFO] Trimming last line of JTL..."
+              sed -i '$d' "${JTL}"
+            fi
+
+            echo "[INFO] Re-running report generation..."
+            /opt/apache-jmeter-5.6.3/bin/jmeter -g "${JTL}" -o "${REPORT}" || {
+              echo "[ERROR] Retry failed — report still broken"
+              exit 1
+            }
+
+            echo "[INFO] Report repaired successfully"
+          else
+            echo "[INFO] Report already generated successfully — no retry needed"
+          fi
+
+      - name: Copy jmeter slave logs
+        shell: bash
+        env:
+          REMOTE_FILE: "/opt/apache-jmeter-5.6.3/bin/jmeter-server.log"
+          LOCAL_DESTINATION: "/tmp/logs"
+        continue-on-error: true
+        run: |
+          mkdir -p "$LOCAL_DESTINATION"
+          if [[ -n "$slave_IPs" ]]; then
+            IFS=',' read -ra SERVERS <<< "$slave_IPs"
+            for server in "${SERVERS[@]}"; do
+              scp -i ~/.ssh/id_rsa -o "StrictHostKeyChecking no" \
+                "ec2-user@$server:$REMOTE_FILE" \
+                "$LOCAL_DESTINATION/$server-$(basename $REMOTE_FILE)"
+            done
+          fi
+          tar -cvf /tmp/jmeter-execution-logs.tar $LOCAL_DESTINATION
+
+      - name: Attaching logs to Job/Workflow
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: jmeter-execution-slave-logs
+          path: /tmp/jmeter-execution-logs.tar
+          retention-days: 3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          role-session-name: ${{ github.repository.id }}-${{ github.job }}-${{ github.triggering_actor }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 43200
+
+      - name: Set job status
+        if: always()
+        id: set-result
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+          elif [[ "${{ job.status }}" == 'skipped' ]]; then
+            echo "result=skipped" >> $GITHUB_OUTPUT
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+          fi
