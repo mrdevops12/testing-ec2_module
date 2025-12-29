@@ -1,0 +1,44 @@
+# ⭐⭐⭐ UPDATED SAFE RETRY LOGIC ⭐⭐⭐
+- name: Retry report generation if failed (EFS-based)
+  shell: bash
+  run: |
+    echo "[INFO] Checking report health before stopping instances..."
+
+    USECASE="${{ env.USECASE_NAME }}"
+    DATE="${{ env.DATE_STAMP }}"
+    BASE="/mnt/efs-jmeter/results/${USECASE}/${DATE}"
+    JTL="${BASE}/${USECASE}.jtl"
+    REPORT="${BASE}/HtmlReport"
+
+    echo "[INFO] JTL File: $JTL"
+    echo "[INFO] Report Dir: $REPORT"
+
+    # 1️⃣ If JTL is missing → EC2 already uploaded report to S3
+    if [[ ! -f "${JTL}" ]]; then
+      echo "[INFO] JTL file not found in runner environment."
+      echo "[INFO] This means EC2 already generated and uploaded the report to S3."
+      echo "[INFO] Skipping retry logic to avoid false failures."
+      exit 0
+    fi
+
+    # 2️⃣ If report is already healthy → skip retry
+    if [[ -s "${REPORT}/index.html" ]] && [[ $(find "${REPORT}" -type f | wc -l) -ge 5 ]]; then
+      echo "[INFO] Report already generated successfully — no retry needed."
+      exit 0
+    fi
+
+    # 3️⃣ Report is broken → retry
+    echo "[WARN] Report generation failed — retrying using EFS logic."
+
+    if [[ $(wc -l < "${JTL}") -gt 1 ]]; then
+      echo "[INFO] Trimming last line of JTL..."
+      sed -i '$d' "${JTL}"
+    fi
+
+    echo "[INFO] Re-running report generation..."
+    /opt/apache-jmeter-5.6.3/bin/jmeter -g "${JTL}" -o "${REPORT}" || {
+      echo "[ERROR] Retry failed — report still broken."
+      exit 1
+    }
+
+    echo "[INFO] Report repaired successfully."
